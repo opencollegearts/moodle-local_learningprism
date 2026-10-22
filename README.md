@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="pix/icon.png" alt="Open College of the Arts" width="160" height="160">
+</p>
+
 # OCA Learning Prism (`local_learningprism`)
 
 Moodle 4.3+ local plugin that lets teachers enable **Learning Prism** per course and provides accessible alternate formats for **Book**, **Page**, **Label**, and **Articulate Rise SCORM** activities:
