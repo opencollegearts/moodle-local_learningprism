@@ -68,6 +68,12 @@ if ($hassiteconfig) {
         1
     ));
 
+    $settings->add(new admin_setting_heading(
+        'local_learningprism/ttsheading',
+        get_string('settings:ttsheading', 'local_learningprism'),
+        get_string('settings:ttsheading_desc', 'local_learningprism')
+    ));
+
     $bgoptions = [];
     foreach (\local_learningprism\html_normalizer::print_background_presets() as $key => $hex) {
         $bgoptions[$key] = get_string('settings:printbackground_' . $key, 'local_learningprism');
@@ -131,6 +137,12 @@ if ($hassiteconfig) {
         get_string('settings:elevenlabsvoice_desc', 'local_learningprism'),
         '',
         PARAM_TEXT
+    ));
+
+    $settings->add(new admin_setting_heading(
+        'local_learningprism/pdfheading',
+        get_string('settings:pdfheading', 'local_learningprism'),
+        get_string('settings:pdfheading_desc', 'local_learningprism')
     ));
 
     $settings->add(new admin_setting_configselect(

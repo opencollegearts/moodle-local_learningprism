@@ -51,12 +51,14 @@ function xmldb_local_learningprism_install() {
     xmldb_local_learningprism_copy_table('local_multipleformats_job', 'local_learningprism_job');
     xmldb_local_learningprism_copy_table('local_multipleformats_request', 'local_learningprism_request');
 
-    $oldconfigs = $DB->get_records('config_plugins', ['plugin' => 'local_multipleformats']);
-    foreach ($oldconfigs as $row) {
-        if ($row->name === 'version') {
-            continue;
+    $oldconfigs = get_config('local_multipleformats');
+    if ($oldconfigs) {
+        foreach ($oldconfigs as $name => $value) {
+            if ($name === 'version') {
+                continue;
+            }
+            set_config($name, $value, 'local_learningprism');
         }
-        set_config($row->name, $row->value, 'local_learningprism');
     }
 
     $DB->set_field('files', 'component', 'local_learningprism', ['component' => 'local_multipleformats']);
@@ -68,16 +70,18 @@ function xmldb_local_learningprism_install() {
     }
     $prefs->close();
 
+    $existingcaps = $DB->get_records_select('role_capabilities', "capability LIKE 'local/learningprism:%'");
+    $capindex = [];
+    foreach ($existingcaps as $existing) {
+        $capindex[$existing->roleid . ':' . $existing->capability] = $existing;
+    }
     $oldcaps = $DB->get_recordset_select('role_capabilities', "capability LIKE 'local/multipleformats:%'");
     foreach ($oldcaps as $rc) {
         $newcap = str_replace('local/multipleformats:', 'local/learningprism:', $rc->capability);
-        $existing = $DB->get_record('role_capabilities', [
-            'roleid' => $rc->roleid,
-            'capability' => $newcap,
-        ]);
-        if ($existing) {
-            $existing->permission = $rc->permission;
-            $DB->update_record('role_capabilities', $existing);
+        $key = $rc->roleid . ':' . $newcap;
+        if (isset($capindex[$key])) {
+            $capindex[$key]->permission = $rc->permission;
+            $DB->update_record('role_capabilities', $capindex[$key]);
         } else {
             $rc->capability = $newcap;
             $DB->update_record('role_capabilities', $rc);

@@ -40,8 +40,7 @@ class pdf_converter implements converter_interface {
             return false;
         }
         if ($engine === 'libreoffice') {
-            $path = get_config('local_learningprism', 'libreofficepath');
-            return $path && is_executable($path);
+            return self::libreoffice_binary() !== '';
         }
         $url = get_config('local_learningprism', 'pdfengineurl');
         return self::is_http_url((string) $url);
@@ -65,6 +64,24 @@ class pdf_converter implements converter_interface {
 
         $filename = docx_converter::safe_filename($title) . '.pdf';
         return filemanager::store_converted_file($jobid, $filename, 'application/pdf', $pdf);
+    }
+
+    /**
+     * Allowlisted LibreOffice binary path, or empty if not usable.
+     *
+     * @return string
+     */
+    private static function libreoffice_binary(): string {
+        $path = (string) get_config('local_learningprism', 'libreofficepath');
+        if ($path === '' || !is_executable($path)) {
+            return '';
+        }
+        $base = strtolower(basename($path));
+        $allowed = ['soffice', 'soffice.exe', 'libreoffice', 'libreoffice.exe'];
+        if (!in_array($base, $allowed, true)) {
+            return '';
+        }
+        return $path;
     }
 
     /**
@@ -162,15 +179,38 @@ class pdf_converter implements converter_interface {
         $docxfile = $tmpdir . '/source.docx';
         file_put_contents($docxfile, $docxbytes);
 
-        $soffice = get_config('local_learningprism', 'libreofficepath');
-        $cmd = escapeshellarg($soffice)
-            . ' --headless --nologo --nolockcheck --nodefault --nofirststartwizard'
-            . ' --convert-to pdf --outdir ' . escapeshellarg($tmpdir)
-            . ' ' . escapeshellarg($docxfile);
-
-        $output = [];
-        $exit = 0;
-        exec($cmd, $output, $exit);
+        $soffice = self::libreoffice_binary();
+        if ($soffice === '') {
+            throw new \moodle_exception('error:pdfnotconfigured', 'local_learningprism');
+        }
+        $cmd = [
+            $soffice,
+            '--headless',
+            '--nologo',
+            '--nolockcheck',
+            '--nodefault',
+            '--nofirststartwizard',
+            '--convert-to',
+            'pdf',
+            '--outdir',
+            $tmpdir,
+            $docxfile,
+        ];
+        $descriptors = [
+            0 => ['pipe', 'r'],
+            1 => ['pipe', 'w'],
+            2 => ['pipe', 'w'],
+        ];
+        $process = proc_open($cmd, $descriptors, $pipes, $tmpdir, null);
+        if (!is_resource($process)) {
+            throw new \moodle_exception('error:conversionfailed', 'local_learningprism');
+        }
+        fclose($pipes[0]);
+        stream_get_contents($pipes[1]);
+        stream_get_contents($pipes[2]);
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+        $exit = proc_close($process);
         $pdffile = $tmpdir . '/source.pdf';
         if ($exit !== 0 || !is_readable($pdffile)) {
             throw new \moodle_exception('error:conversionfailed', 'local_learningprism');

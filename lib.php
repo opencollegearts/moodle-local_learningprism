@@ -133,26 +133,6 @@ function local_learningprism_extend_navigation_course($navigation, $course, $con
     }
 }
 
-/**
- * Inject course settings checkbox (legacy callback for broader Moodle support).
- *
- * @param moodleform $formwrapper
- * @param MoodleQuickForm $mform
- */
-function local_learningprism_coursemodule_standard_elements($formwrapper, $mform) {
-    // Not used for course modules; course form uses hook / course_extended_form.
-}
-
-/**
- * Add fields to the course edit form.
- *
- * @param moodleform_mod|moodleform $formwrapper
- * @param MoodleQuickForm $mform
- */
-function local_learningprism_course_extended_form($formwrapper, $mform) {
-    // Implemented via classes/local/hooks/course_form.php where available.
-}
-
 // Intentionally no local_learningprism_before_standard_html_head().
 // On Moodle 4.4+/Open LMS, a legacy callback triggers debugging() migration
 // notices that Whoops converts into fatal ErrorExceptions and breaks all JS

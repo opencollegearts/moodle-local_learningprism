@@ -119,6 +119,32 @@ class job_manager {
         }
         $optionshash = $personal ? html_normalizer::print_options_hash($printoptions) : '';
 
+        $cmjobs = $DB->get_records('local_learningprism_job', ['cmid' => $cmid]);
+        $exactjobs = [];
+        $sharedfallback = [];
+        foreach ($cmjobs as $cmjob) {
+            $ispersonal = (int) $cmjob->personal === 1;
+            if ($personal) {
+                if ($ispersonal
+                        && (int) $cmjob->userid === $userid
+                        && $cmjob->contenthash === $hash
+                        && $cmjob->optionshash === $optionshash) {
+                    $exactjobs[$cmjob->format] = $cmjob;
+                }
+                continue;
+            }
+            if ($ispersonal) {
+                continue;
+            }
+            if ($cmjob->contenthash === $hash) {
+                $exactjobs[$cmjob->format] = $cmjob;
+            }
+            if (!isset($sharedfallback[$cmjob->format])
+                    || (int) $cmjob->timemodified > (int) $sharedfallback[$cmjob->format]->timemodified) {
+                $sharedfallback[$cmjob->format] = $cmjob;
+            }
+        }
+
         foreach ($formats as $format) {
             if (!in_array($format, $enabled, true)) {
                 continue;
@@ -127,27 +153,9 @@ class job_manager {
                 continue;
             }
 
-            $params = [
-                'cmid' => $cmid,
-                'contenthash' => $hash,
-                'format' => $format,
-                'personal' => $personal ? 1 : 0,
-            ];
-            if ($personal) {
-                $params['userid'] = $userid;
-                $params['optionshash'] = $optionshash;
-            }
-            $existing = $DB->get_record('local_learningprism_job', $params);
+            $existing = $exactjobs[$format] ?? false;
             if (!$existing && !$personal) {
-                $candidates = $DB->get_records(
-                    'local_learningprism_job',
-                    ['cmid' => $cmid, 'format' => $format, 'personal' => 0],
-                    'timemodified DESC',
-                    '*',
-                    0,
-                    1
-                );
-                $existing = $candidates ? reset($candidates) : false;
+                $existing = $sharedfallback[$format] ?? false;
             }
             if ($existing) {
                 $requeued = self::requeue_job($existing, $userid, $forceregenerate);
@@ -376,14 +384,24 @@ class job_manager {
         $enabled = manager::enabled_formats();
         $printoptions = html_normalizer::user_print_options((int) ($USER->id ?? 0));
         $optionshash = html_normalizer::print_options_hash($printoptions);
+        $jobs = $DB->get_records('local_learningprism_job', [
+            'cmid' => $cmid,
+            'contenthash' => $hash,
+        ]);
+        $sharedjobs = [];
+        $personaljobs = [];
+        foreach ($jobs as $loaded) {
+            if ((int) $loaded->personal === 0) {
+                $sharedjobs[$loaded->format] = $loaded;
+            } else if (!empty($USER->id)
+                    && (int) $loaded->userid === (int) $USER->id
+                    && $loaded->optionshash === $optionshash) {
+                $personaljobs[$loaded->format] = $loaded;
+            }
+        }
         $result = [];
         foreach ($enabled as $format) {
-            $job = $DB->get_record('local_learningprism_job', [
-                'cmid' => $cmid,
-                'contenthash' => $hash,
-                'format' => $format,
-                'personal' => 0,
-            ]);
+            $job = $sharedjobs[$format] ?? null;
             $item = [
                 'format' => $format,
                 'label' => get_string('format:' . $format, 'local_learningprism'),
@@ -402,14 +420,7 @@ class job_manager {
                 $item['downloadurl'] = $url ? $url->out(false) : '';
             }
             if ($item['supportspersonal'] && !empty($USER->id)) {
-                $pjob = $DB->get_record('local_learningprism_job', [
-                    'cmid' => $cmid,
-                    'contenthash' => $hash,
-                    'format' => $format,
-                    'personal' => 1,
-                    'userid' => (int) $USER->id,
-                    'optionshash' => $optionshash,
-                ]);
+                $pjob = $personaljobs[$format] ?? null;
                 if ($pjob) {
                     $item['personalstatus'] = $pjob->status;
                     $item['personaljobid'] = (int) $pjob->id;

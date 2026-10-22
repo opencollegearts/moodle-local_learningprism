@@ -94,5 +94,9 @@ function xmldb_local_learningprism_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026102219, 'local', 'learningprism');
     }
 
+    if ($oldversion < 2026102220) {
+        upgrade_plugin_savepoint(true, 2026102220, 'local', 'learningprism');
+    }
+
     return true;
 }

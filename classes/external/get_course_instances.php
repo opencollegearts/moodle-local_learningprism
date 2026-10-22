@@ -53,13 +53,7 @@ class get_course_instances extends external_api {
         $params = self::validate_parameters(self::execute_parameters(), ['courseid' => $courseid]);
         $context = \context_course::instance($params['courseid']);
         self::validate_context($context);
-        if (!has_any_capability([
-            'local/learningprism:download',
-            'local/learningprism:request',
-            'local/learningprism:manage',
-        ], $context)) {
-            throw new \required_capability_exception($context, 'local/learningprism:download', 'nopermissions', '');
-        }
+        require_capability('local/learningprism:download', $context);
 
         if (!manager::plugin_enabled() || !manager::course_enabled($params['courseid'])) {
             return ['instances' => []];

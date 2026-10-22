@@ -371,4 +371,4 @@ Before you submit, the Marketplace review also expects:
 - A short and a full English description (this README can be the full description)
 - Demo credentials if you want reviewers to test Google or ElevenLabs audio (PDF/DOCX/EPUB do not need them)
 
-Google Cloud TTS and ElevenLabs are optional paid third-party services. Gotenberg is optional and self-hosted. Word and EPUB work with no extra accounts.
+Google Cloud TTS and ElevenLabs are optional third-party services that use **the customer's own accounts**. They are not a Learning Prism licence, subscription, or extra Marketplace purchase. Gotenberg/LibreOffice are optional and self-hosted. Word and EPUB work with no extra accounts. After a Marketplace purchase the plugin is fully usable; site admins may later paste their own TTS credentials if they want audio.
