@@ -1,0 +1,27 @@
+# Gotenberg sidecar for OCA Learning Prism PDF conversion.
+#
+# Usage (from this folder, or copy the file elsewhere as docker-compose.yml):
+#   docker compose -f docker-compose.example.yml up -d
+#
+# Moodle on the same machine (MAMP, local PHP, host install):
+#   PDF engine URL = http://127.0.0.1:3000
+#
+# Moodle in Docker on this Compose network:
+#   PDF engine URL = http://gotenberg:3000
+#   (and you can drop the "ports" mapping if Moodle does not need host access)
+#
+# Bind is localhost-only so the converter is not on the public internet.
+
+services:
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    container_name: gotenberg
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    command:
+      - "gotenberg"
+      - "--chromium-disable-javascript=true"
+      - "--api-timeout=120s"
+    # Chromium needs RAM (2 GB+). If long Books fail or the container is killed,
+    # raise the Docker Desktop memory limit or add a memory reservation in Compose.

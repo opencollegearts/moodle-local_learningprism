@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-hidden="true">
+  <title>OCA Learning Prism</title>
+  <circle cx="16" cy="7" r="3" fill="#0f6cbf"/>
+  <path fill="#0f6cbf" d="M8 13c0-1 1-2 2-2h12c1 0 2 1 2 2v2c-4 2-8 2-12 0v-2zm2 6 6 9 6-9c-4 1-8 1-12 0z"/>
+</svg>

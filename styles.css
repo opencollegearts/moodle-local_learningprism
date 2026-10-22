@@ -1,0 +1,82 @@
+/**
+ * Learning Prism activity controls — keep selectors tightly scoped.
+ * Avoid anything that could affect global layout/navigation.
+ *
+ * @package    local_learningprism
+ * @copyright  2026 Open College of the Arts
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+.local-learningprism-control {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 0.35rem;
+    vertical-align: middle;
+    position: relative;
+    z-index: 3;
+}
+
+/* Labels often have no activity link — keep the control visible on the card. */
+.modtype_label .local-learningprism-control,
+.activity.label .local-learningprism-control {
+    float: right;
+    margin: 0.25rem 0.5rem;
+}
+
+button.btn-link.local-learningprism-button {
+    padding: 0.15rem 0.35rem;
+    line-height: 1;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    color: #0f6cbf;
+}
+
+button.btn-link.local-learningprism-button.lp-state-download {
+    color: #198754;
+}
+
+button.btn-link.local-learningprism-button.lp-state-processing {
+    color: #6c757d;
+}
+
+button.btn-link.local-learningprism-button.lp-state-error {
+    color: #dc3545;
+}
+
+.local-learningprism-button .lp-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.local-learningprism-button .lp-icon > i.icon {
+    display: none;
+    margin: 0;
+    font-size: 1.15rem;
+    width: 1.15rem;
+    height: 1.15rem;
+    line-height: 1;
+    color: inherit;
+}
+
+.local-learningprism-button.lp-state-request i.icon.lp-icon-request,
+.local-learningprism-button.lp-state-processing i.icon.lp-icon-processing,
+.local-learningprism-button.lp-state-download i.icon.lp-icon-download,
+.local-learningprism-button.lp-state-error i.icon.lp-icon-error {
+    display: inline-block;
+}
+
+.modtype_label .local-learningprism-control {
+    position: relative;
+    z-index: 2;
+}
+
+.local-learningprism-modal .lp-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.local-learningprism-modal .lp-actions > .btn {
+    margin: 0 0.75rem 0.5rem 0;
+}

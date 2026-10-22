@@ -1,0 +1,33 @@
+{{!
+    This file is part of Moodle - http://moodle.org/
+    @package   local_learningprism
+    @copyright 2026 Open College of the Arts
+    @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+
+    @template local_learningprism/control_icon
+
+    Activity control button for Learning Prism.
+
+    Example context (json):
+    {
+        "cmid": 12,
+        "state": "request",
+        "modname": "page",
+        "title": "Request formats"
+    }
+}}
+<span class="local-learningprism-control" data-lp-modname="{{modname}}">
+    <button type="button"
+            class="btn btn-link btn-sm local-learningprism-button lp-state-{{state}}"
+            data-lp-cmid="{{cmid}}"
+            data-lp-state="{{state}}"
+            title="{{title}}"
+            aria-label="{{title}}">
+            <span class="lp-icon" aria-hidden="true">
+                <i class="icon fa-solid fa-fw fa-universal-access lp-icon-request"></i>
+                <i class="icon fa-solid fa-fw fa-spinner fa-spin lp-icon-processing"></i>
+                <i class="icon fa-solid fa-fw fa-file-circle-check lp-icon-download"></i>
+                <i class="icon fa-solid fa-fw fa-circle-exclamation lp-icon-error"></i>
+            </span>
+    </button>
+</span>
