@@ -356,6 +356,9 @@ define([
             return true;
         }
         injecting[key] = true;
+        if (place === 'card') {
+            anchor.classList.add('lp-has-prism-control');
+        }
         Templates.render('local_learningprism/control_icon', {
             cmid: instance.cmid,
             state: instance.state,

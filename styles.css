@@ -32,9 +32,7 @@
 }
 
 /* Activity cards: always the same top-right spot, left of the kebab / chevron. */
-.activity-item,
-.snap-header-card,
-.snap-asset-content {
+.lp-has-prism-control {
     position: relative;
 }
 
