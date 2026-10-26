@@ -98,5 +98,25 @@ function xmldb_local_learningprism_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026102220, 'local', 'learningprism');
     }
 
+    if ($oldversion < 2026102600) {
+        upgrade_plugin_savepoint(true, 2026102600, 'local', 'learningprism');
+    }
+
+    if ($oldversion < 2026102601) {
+        upgrade_plugin_savepoint(true, 2026102601, 'local', 'learningprism');
+    }
+
+    if ($oldversion < 2026102602) {
+        upgrade_plugin_savepoint(true, 2026102602, 'local', 'learningprism');
+    }
+
+    if ($oldversion < 2026102603) {
+        upgrade_plugin_savepoint(true, 2026102603, 'local', 'learningprism');
+    }
+
+    if ($oldversion < 2026102604) {
+        upgrade_plugin_savepoint(true, 2026102604, 'local', 'learningprism');
+    }
+
     return true;
 }

@@ -1,5 +1,7 @@
 <p align="center">
-  <img src="pix/icon.png" alt="Open College of the Arts" width="160" height="160">
+  <img src="pix/oca.png" alt="Open College of the Arts" width="140" height="140">
+  &nbsp;&nbsp;
+  <img src="pix/icon.png" alt="OCA Learning Prism" width="140" height="140">
 </p>
 
 # OCA Learning Prism (`local_learningprism`)
@@ -358,17 +360,3 @@ npx grunt amd --root=local/learningprism
 ## Architecture (short)
 
 Course enable flag → course-page AMD injects controls on book/page/label/Rise SCORM → AJAX queues jobs → converters run (DOCX/EPUB local zip; PDF/TTS external) → files stored in `local_learningprism` file area → pluginfile download with capability checks.
-
-## Moodle Marketplace listing
-
-Zip the `learningprism` directory (not its parent). The folder name and `$plugin->component` must stay `learningprism` / `local_learningprism`.
-
-Before you submit, the Marketplace review also expects:
-
-- A **public git repository** named `moodle-local_learningprism`
-- A **public issue tracker** (GitHub Issues is fine)
-- Screenshots of the course control, modal, and report
-- A short and a full English description (this README can be the full description)
-- Demo credentials if you want reviewers to test Google or ElevenLabs audio (PDF/DOCX/EPUB do not need them)
-
-Google Cloud TTS and ElevenLabs are optional third-party services that use **the customer's own accounts**. They are not a Learning Prism licence, subscription, or extra Marketplace purchase. Gotenberg/LibreOffice are optional and self-hosted. Word and EPUB work with no extra accounts. After a Marketplace purchase the plugin is fully usable; site admins may later paste their own TTS credentials if they want audio.

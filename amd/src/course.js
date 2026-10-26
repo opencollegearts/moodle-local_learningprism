@@ -32,6 +32,10 @@ define([
     'core/str'
 ], function($, Ajax, Notification, Templates, Str) {
     var pageCourseId = 0;
+    var courseInstances = [];
+    var injecting = {};
+    var injectTimer = null;
+    var observerStarted = false;
     var stateTitles = {
         request: '',
         processing: '',
@@ -50,64 +54,105 @@ define([
     };
 
     var updateIconState = function(cmid, state) {
-        var btn = document.querySelector('[data-lp-cmid="' + cmid + '"]');
-        if (!btn) {
-            return;
+        var buttons = document.querySelectorAll('[data-lp-cmid="' + cmid + '"]');
+        var i;
+        for (i = 0; i < buttons.length; i++) {
+            var btn = buttons[i];
+            btn.setAttribute('data-lp-state', state);
+            btn.classList.remove('lp-state-request', 'lp-state-processing', 'lp-state-download', 'lp-state-error');
+            btn.classList.add('lp-state-' + state);
+            btn.setAttribute('title', stateTitle(state));
+            btn.setAttribute('aria-label', stateTitle(state));
         }
-        btn.setAttribute('data-lp-state', state);
-        btn.classList.remove('lp-state-request', 'lp-state-processing', 'lp-state-download', 'lp-state-error');
-        btn.classList.add('lp-state-' + state);
-        btn.setAttribute('title', stateTitle(state));
-        btn.setAttribute('aria-label', stateTitle(state));
+    };
+
+    var isCourseIndexNode = function(el) {
+        return !!(el && el.closest && el.closest('#courseindex, .courseindex, [data-region="courseindex"], #toc-searchables'));
     };
 
     /**
-     * Find a node to append the control icon to (Boost + Snap, labels + linked activities).
+     * Activity card in the course content column (never the course index).
+     *
+     * @param {string} cmid
+     * @return {Element|null}
+     */
+    var findActivityRoot = function(cmid) {
+        var selectors = [
+            '#module-' + cmid,
+            'li.activity[data-id="' + cmid + '"]',
+            'li.activity-wrapper[data-id="' + cmid + '"]',
+            '.activity[data-cmid="' + cmid + '"]',
+            '[data-for="cmitem"][data-id="' + cmid + '"]',
+            'li.snap-activity#module-' + cmid,
+            'li.snap-resource#module-' + cmid,
+            'li.modtype_label[data-id="' + cmid + '"]',
+            'li.modtype_page[data-id="' + cmid + '"]'
+        ];
+        var i;
+        var j;
+        for (i = 0; i < selectors.length; i++) {
+            var found = document.querySelectorAll(selectors[i]);
+            for (j = 0; j < found.length; j++) {
+                if (!isCourseIndexNode(found[j])) {
+                    return found[j];
+                }
+            }
+        }
+        return null;
+    };
+
+    /**
+     * Card container so the control can sit in the top-right of the activity.
      *
      * @param {Object} instance
      * @return {Element|null}
      */
-    var findActivityNode = function(instance) {
-        var cmid = String(instance.cmid);
-        var activity = document.querySelector('#module-' + cmid) ||
-            document.querySelector('li.activity[data-id="' + cmid + '"]') ||
-            document.querySelector('.activity[data-cmid="' + cmid + '"]') ||
-            document.querySelector('[data-for="cmitem"][data-id="' + cmid + '"]');
-
-        if (!activity && instance.url) {
-            var link = document.querySelector('a[href="' + instance.url + '"]') ||
-                document.querySelector('a[href*="/mod/' + instance.modname + '/view.php?id=' + cmid + '"]') ||
-                document.querySelector('.snap-asset-link a[href*="id=' + cmid + '"]');
-            if (link) {
-                activity = link.closest('li.activity, .activity, .snap-asset, [data-for="cmitem"]') || link.parentElement;
-            }
-        }
-
+    var findCardNode = function(instance) {
+        var activity = findActivityRoot(String(instance.cmid));
         if (!activity) {
             return null;
         }
-
-        // Prefer visible title / content regions used by Boost 4.x and Snap.
-        var candidates = [
-            '.activity-grid .activity-name',
-            '.activityname',
-            '.activitytitle',
-            '.activity-instance',
-            '.contentwithoutlink',
-            '.activity-item .description',
+        var containers = [
             '.activity-item',
-            '.snap-asset-link',
+            '.snap-header-card',
             '.snap-asset-content',
-            '.snap-asset'
+            '.asset-wrapper'
         ];
         var i;
-        for (i = 0; i < candidates.length; i++) {
-            var node = activity.querySelector(candidates[i]);
+        for (i = 0; i < containers.length; i++) {
+            var node = activity.querySelector(containers[i]);
             if (node) {
                 return node;
             }
         }
         return activity;
+    };
+
+    /**
+     * Course index / Snap contents entries for this CM.
+     *
+     * @param {Object} instance
+     * @return {Element[]}
+     */
+    var findNavNodes = function(instance) {
+        var cmid = String(instance.cmid);
+        var nodes = [];
+        var indexItem = document.querySelector('#course-index-cm-' + cmid) ||
+            document.querySelector('.courseindex-item[data-for="cm"][data-id="' + cmid + '"]');
+        if (indexItem) {
+            nodes.push(indexItem);
+        }
+        var tocItem = document.querySelector('#toc-searchables li[data-id="' + cmid + '"]');
+        if (tocItem) {
+            nodes.push(tocItem);
+        }
+        return nodes;
+    };
+
+    var courseIndexPresent = function() {
+        return !!(document.querySelector('#courseindex') ||
+            document.querySelector('[data-region="courseindex"]') ||
+            document.querySelector('#toc-searchables'));
     };
 
     var openModal = function(instance, canManage) {
@@ -285,49 +330,147 @@ define([
         }).catch(Notification.exception);
     };
 
-    var injectControl = function(instance, canManage) {
-        if (document.querySelector('[data-lp-cmid="' + instance.cmid + '"]')) {
-            return true;
+    var bindControlButton = function(anchor, instance, canManage) {
+        var btn = anchor.querySelector('[data-lp-cmid="' + instance.cmid + '"]');
+        if (!btn || btn.getAttribute('data-lp-bound') === '1') {
+            return;
         }
-        var anchor = findActivityNode(instance);
+        btn.setAttribute('data-lp-bound', '1');
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            openModal(instance, canManage);
+        });
+    };
+
+    var injectAt = function(anchor, instance, canManage, place) {
         if (!anchor) {
             return false;
         }
+        if (anchor.querySelector('[data-lp-cmid="' + instance.cmid + '"]')) {
+            bindControlButton(anchor, instance, canManage);
+            return true;
+        }
+        var key = instance.cmid + ':' + place + ':' + (anchor.id || '');
+        if (injecting[key]) {
+            return true;
+        }
+        injecting[key] = true;
         Templates.render('local_learningprism/control_icon', {
             cmid: instance.cmid,
             state: instance.state,
             modname: instance.modname,
-            title: stateTitle(instance.state)
+            title: stateTitle(instance.state),
+            place: place
         }).then(function(html, js) {
-            Templates.appendNodeContents(anchor, html, js);
-            var btn = document.querySelector('[data-lp-cmid="' + instance.cmid + '"]');
-            if (btn) {
-                btn.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    openModal(instance, canManage);
-                });
+            if (!anchor.querySelector('[data-lp-cmid="' + instance.cmid + '"]')) {
+                Templates.appendNodeContents(anchor, html, js);
             }
-        }).catch(Notification.exception);
+            bindControlButton(anchor, instance, canManage);
+            injecting[key] = false;
+        }).catch(function(ex) {
+            injecting[key] = false;
+            Notification.exception(ex);
+        });
         return true;
+    };
+
+    var injectControl = function(instance, canManage) {
+        var card = findCardNode(instance);
+        var navs = findNavNodes(instance);
+        var waiting = false;
+
+        if (card) {
+            injectAt(card, instance, canManage, 'card');
+        } else {
+            waiting = true;
+        }
+
+        if (navs.length) {
+            navs.forEach(function(nav) {
+                injectAt(nav, instance, canManage, 'nav');
+            });
+        } else if (courseIndexPresent()) {
+            waiting = true;
+        }
+
+        return !waiting;
+    };
+
+    var tryInject = function(instances, attempt, canManage, retry) {
+        var pending = [];
+        instances.forEach(function(instance) {
+            if (!injectControl(instance, canManage)) {
+                pending.push(instance);
+            }
+        });
+        // Course formats may render activities after first paint (Snap/Boost).
+        if (retry !== false && pending.length && attempt < 8) {
+            window.setTimeout(function() {
+                tryInject(pending, attempt + 1, canManage, true);
+            }, 400);
+        }
+    };
+
+    var scheduleInject = function(canManage) {
+        if (!courseInstances.length) {
+            return;
+        }
+        if (injectTimer) {
+            window.clearTimeout(injectTimer);
+        }
+        injectTimer = window.setTimeout(function() {
+            injectTimer = null;
+            tryInject(courseInstances, 0, canManage, false);
+        }, 150);
+    };
+
+    /**
+     * Snap loads later sections on demand (hashchange + fragment). Re-run
+     * injection when those nodes appear.
+     *
+     * @param {boolean} canManage
+     */
+    var watchForSections = function(canManage) {
+        if (observerStarted) {
+            return;
+        }
+        observerStarted = true;
+        window.addEventListener('hashchange', function() {
+            scheduleInject(canManage);
+        });
+        window.addEventListener('popstate', function() {
+            scheduleInject(canManage);
+        });
+        if (typeof MutationObserver === 'undefined') {
+            return;
+        }
+        var observer = new MutationObserver(function() {
+            scheduleInject(canManage);
+        });
+        var selectors = [
+            'ul.sections',
+            '#region-main',
+            '.course-content',
+            '#courseindex',
+            '[data-region="courseindex"]'
+        ];
+        var i;
+        var observed = false;
+        for (i = 0; i < selectors.length; i++) {
+            var root = document.querySelector(selectors[i]);
+            if (root) {
+                observer.observe(root, {childList: true, subtree: true});
+                observed = true;
+            }
+        }
+        if (!observed && document.body) {
+            observer.observe(document.body, {childList: true, subtree: true});
+        }
     };
 
     var init = function(courseId, canManage) {
         pageCourseId = courseId;
-        var tryInject = function(instances, attempt) {
-            var pending = [];
-            instances.forEach(function(instance) {
-                if (!injectControl(instance, canManage)) {
-                    pending.push(instance);
-                }
-            });
-            // Course formats may render activities after first paint (Snap/Boost).
-            if (pending.length && attempt < 8) {
-                window.setTimeout(function() {
-                    tryInject(pending, attempt + 1);
-                }, 400);
-            }
-        };
 
         Str.get_strings([
             {key: 'icon:request', component: 'local_learningprism'},
@@ -344,7 +487,9 @@ define([
                 args: {courseid: courseId}
             }])[0];
         }).then(function(response) {
-            tryInject(response.instances || [], 0);
+            courseInstances = response.instances || [];
+            watchForSections(canManage);
+            tryInject(courseInstances, 0, canManage, true);
         }).catch(Notification.exception);
     };
 

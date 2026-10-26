@@ -13,13 +13,15 @@
         "cmid": 12,
         "state": "request",
         "modname": "page",
-        "title": "Request formats"
+        "title": "Request formats",
+        "place": "card"
     }
 }}
-<span class="local-learningprism-control" data-lp-modname="{{modname}}">
+<span class="local-learningprism-control lp-place-{{place}}" data-lp-modname="{{modname}}" data-lp-place="{{place}}">
     <button type="button"
             class="btn btn-link btn-sm local-learningprism-button lp-state-{{state}}"
             data-lp-cmid="{{cmid}}"
+            data-lp-place="{{place}}"
             data-lp-state="{{state}}"
             title="{{title}}"
             aria-label="{{title}}">

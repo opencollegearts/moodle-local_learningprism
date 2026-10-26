@@ -13,13 +13,38 @@
     vertical-align: middle;
     position: relative;
     z-index: 3;
+    flex: 0 0 auto;
 }
 
-/* Labels often have no activity link — keep the control visible on the card. */
-.modtype_label .local-learningprism-control,
-.activity.label .local-learningprism-control {
-    float: right;
-    margin: 0.25rem 0.5rem;
+/* Course index / Snap contents list: sit beside the activity name, do not truncate. */
+.courseindex-item .local-learningprism-control,
+#courseindex .local-learningprism-control,
+#toc-searchables .local-learningprism-control {
+    margin-left: 0.15rem;
+    margin-right: 0.15rem;
+}
+
+.courseindex-item .local-learningprism-button .lp-icon > i.icon,
+#courseindex .local-learningprism-button .lp-icon > i.icon {
+    font-size: 0.95rem;
+    width: 0.95rem;
+    height: 0.95rem;
+}
+
+/* Activity cards: always the same top-right spot, left of the kebab / chevron. */
+.activity-item,
+.snap-header-card,
+.snap-asset-content {
+    position: relative;
+}
+
+.local-learningprism-control.lp-place-card {
+    position: absolute;
+    top: 0.4rem;
+    right: 2.75rem;
+    z-index: 5;
+    margin: 0;
+    float: none;
 }
 
 button.btn-link.local-learningprism-button {
@@ -64,11 +89,6 @@ button.btn-link.local-learningprism-button.lp-state-error {
 .local-learningprism-button.lp-state-download i.icon.lp-icon-download,
 .local-learningprism-button.lp-state-error i.icon.lp-icon-error {
     display: inline-block;
-}
-
-.modtype_label .local-learningprism-control {
-    position: relative;
-    z-index: 2;
 }
 
 .local-learningprism-modal .lp-actions {
