@@ -196,17 +196,25 @@ class job_manager {
         }
 
         // Attempt immediate local zip conversions (DOCX / EPUB).
+        $processedids = [];
         foreach ($jobs as $job) {
             if (in_array($job->format, [manager::FORMAT_DOCX, manager::FORMAT_EPUB], true)
                     && $job->status === manager::STATUS_QUEUED) {
                 try {
                     self::process_job($job);
-                    $jobs = array_map(static function ($j) use ($job) {
-                        return ((int) $j->id === (int) $job->id) ? self::get_job((int) $job->id) : $j;
-                    }, $jobs);
+                    $processedids[] = (int) $job->id;
                 } catch (\Throwable $e) {
                     // Leave queued for cron. Avoid debugging() — Whoops promotes it to fatal.
                     error_log('local_learningprism queue local: ' . $e->getMessage());
+                }
+            }
+        }
+        if ($processedids) {
+            $freshjobs = $DB->get_records_list('local_learningprism_job', 'id', $processedids);
+            foreach ($jobs as $index => $job) {
+                $id = (int) $job->id;
+                if (isset($freshjobs[$id])) {
+                    $jobs[$index] = $freshjobs[$id];
                 }
             }
         }
