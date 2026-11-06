@@ -76,6 +76,32 @@ class provider implements
             'html' => 'privacy:metadata:pdfengine',
         ], 'privacy:metadata:pdfengine');
 
+        $collection->add_database_table('local_learningprism_notebook', [
+            'userid' => 'privacy:metadata:local_learningprism_notebook:userid',
+            'courseid' => 'privacy:metadata:local_learningprism_notebook:courseid',
+            'sharemode' => 'privacy:metadata:local_learningprism_notebook:sharemode',
+            'groupemail' => 'privacy:metadata:local_learningprism_notebook:groupemail',
+            'timecreated' => 'privacy:metadata:local_learningprism_notebook:timecreated',
+        ], 'privacy:metadata:local_learningprism_notebook');
+
+        $collection->add_external_location_link('notebooklm', [
+            'files' => 'privacy:metadata:notebooklm:files',
+            'email' => 'privacy:metadata:notebooklm:email',
+        ], 'privacy:metadata:notebooklm');
+
+        $collection->add_database_table('local_learningprism_archive', [
+            'userid' => 'privacy:metadata:local_learningprism_archive:userid',
+            'courseid' => 'privacy:metadata:local_learningprism_archive:courseid',
+            'sharemode' => 'privacy:metadata:local_learningprism_archive:sharemode',
+            'groupemail' => 'privacy:metadata:local_learningprism_archive:groupemail',
+            'timecreated' => 'privacy:metadata:local_learningprism_archive:timecreated',
+        ], 'privacy:metadata:local_learningprism_archive');
+
+        $collection->add_external_location_link('googledrive', [
+            'files' => 'privacy:metadata:googledrive:files',
+            'email' => 'privacy:metadata:googledrive:email',
+        ], 'privacy:metadata:googledrive');
+
         $collection->add_subsystem_link('core_files', [], 'privacy:metadata:corefiles');
 
         return $collection;
@@ -103,6 +129,18 @@ class provider implements
                   JOIN {context} ctx ON ctx.instanceid = cm.id AND ctx.contextlevel = :level
                  WHERE r.userid = :userid";
         $contextlist->add_from_sql($sql, ['userid' => $userid, 'level' => CONTEXT_MODULE]);
+
+        $sql = "SELECT ctx.id
+                  FROM {local_learningprism_notebook} n
+                  JOIN {context} ctx ON ctx.instanceid = n.courseid AND ctx.contextlevel = :level
+                 WHERE n.userid = :userid";
+        $contextlist->add_from_sql($sql, ['userid' => $userid, 'level' => CONTEXT_COURSE]);
+
+        $sql = "SELECT ctx.id
+                  FROM {local_learningprism_archive} a
+                  JOIN {context} ctx ON ctx.instanceid = a.courseid AND ctx.contextlevel = :level
+                 WHERE a.userid = :userid";
+        $contextlist->add_from_sql($sql, ['userid' => $userid, 'level' => CONTEXT_COURSE]);
         return $contextlist;
     }
 
@@ -141,6 +179,26 @@ class provider implements
         global $DB;
         $userid = $contextlist->get_user()->id;
         foreach ($contextlist->get_contexts() as $context) {
+            if ($context->contextlevel == CONTEXT_COURSE) {
+                $notebooks = $DB->get_records('local_learningprism_notebook', [
+                    'courseid' => $context->instanceid,
+                    'userid' => $userid,
+                ]);
+                $archives = $DB->get_records('local_learningprism_archive', [
+                    'courseid' => $context->instanceid,
+                    'userid' => $userid,
+                ]);
+                if ($notebooks || $archives) {
+                    writer::with_context($context)->export_data(
+                        [get_string('pluginname', 'local_learningprism')],
+                        (object) [
+                            'notebooks' => array_values($notebooks),
+                            'archives' => array_values($archives),
+                        ]
+                    );
+                }
+                continue;
+            }
             if ($context->contextlevel != CONTEXT_MODULE) {
                 continue;
             }
@@ -169,6 +227,10 @@ class provider implements
      */
     public static function delete_data_for_all_users_in_context(\context $context): void {
         global $DB;
+        if ($context->contextlevel == CONTEXT_COURSE) {
+            self::delete_course_integrations((int) $context->instanceid);
+            return;
+        }
         if ($context->contextlevel != CONTEXT_MODULE) {
             return;
         }
@@ -178,6 +240,26 @@ class provider implements
             \local_learningprism\filemanager::delete_job_files((int) $job->id);
         }
         $DB->delete_records('local_learningprism_job', ['cmid' => $context->instanceid]);
+    }
+
+    /**
+     * Remove notebook / Drive archive rows for a course (no remote Google wipe).
+     *
+     * @param int $courseid
+     */
+    private static function delete_course_integrations(int $courseid): void {
+        global $DB;
+        $notebooks = $DB->get_records('local_learningprism_notebook', ['courseid' => $courseid], '', 'id');
+        foreach ($notebooks as $notebook) {
+            $DB->delete_records('local_learningprism_nbsource', ['notebookid' => $notebook->id]);
+        }
+        $DB->delete_records('local_learningprism_notebook', ['courseid' => $courseid]);
+
+        $archives = $DB->get_records('local_learningprism_archive', ['courseid' => $courseid], '', 'id');
+        foreach ($archives as $archive) {
+            $DB->delete_records('local_learningprism_archiveitem', ['archiveid' => $archive->id]);
+        }
+        $DB->delete_records('local_learningprism_archive', ['courseid' => $courseid]);
     }
 
     /**
@@ -191,6 +273,21 @@ class provider implements
         unset_user_preference('local_learningprism_printbackground', $userid);
         unset_user_preference('local_learningprism_font', $userid);
         foreach ($contextlist->get_contexts() as $context) {
+            if ($context->contextlevel == CONTEXT_COURSE) {
+                $DB->set_field(
+                    'local_learningprism_notebook',
+                    'userid',
+                    0,
+                    ['courseid' => $context->instanceid, 'userid' => $userid]
+                );
+                $DB->set_field(
+                    'local_learningprism_archive',
+                    'userid',
+                    0,
+                    ['courseid' => $context->instanceid, 'userid' => $userid]
+                );
+                continue;
+            }
             if ($context->contextlevel != CONTEXT_MODULE) {
                 continue;
             }
@@ -233,6 +330,13 @@ class provider implements
      */
     public static function get_users_in_context(userlist $userlist): void {
         $context = $userlist->get_context();
+        if ($context->contextlevel == CONTEXT_COURSE) {
+            $sql = "SELECT userid FROM {local_learningprism_notebook} WHERE courseid = :courseid AND userid > 0";
+            $userlist->add_from_sql('userid', $sql, ['courseid' => $context->instanceid]);
+            $sql = "SELECT userid FROM {local_learningprism_archive} WHERE courseid = :courseid AND userid > 0";
+            $userlist->add_from_sql('userid', $sql, ['courseid' => $context->instanceid]);
+            return;
+        }
         if ($context->contextlevel != CONTEXT_MODULE) {
             return;
         }
@@ -253,6 +357,29 @@ class provider implements
     public static function delete_data_for_users(approved_userlist $userlist): void {
         global $DB;
         $context = $userlist->get_context();
+        if ($context->contextlevel == CONTEXT_COURSE) {
+            $userids = $userlist->get_userids();
+            if (!$userids) {
+                return;
+            }
+            list($insql, $params) = $DB->get_in_or_equal($userids, SQL_PARAMS_NAMED);
+            $params['courseid'] = $context->instanceid;
+            $DB->set_field_select(
+                'local_learningprism_notebook',
+                'userid',
+                0,
+                "courseid = :courseid AND userid $insql",
+                $params
+            );
+            $DB->set_field_select(
+                'local_learningprism_archive',
+                'userid',
+                0,
+                "courseid = :courseid AND userid $insql",
+                $params
+            );
+            return;
+        }
         if ($context->contextlevel != CONTEXT_MODULE) {
             return;
         }

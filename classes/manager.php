@@ -45,6 +45,7 @@ class manager {
     /** File API. */
     public const COMPONENT = 'local_learningprism';
     public const FILEAREA = 'formats';
+    public const FILEAREA_ARCHIVE = 'archive';
 
     /**
      * Whether the plugin is enabled site-wide.
@@ -150,5 +151,30 @@ class manager {
      */
     public static function supported_modules(): array {
         return ['book', 'page', 'label', 'scorm'];
+    }
+
+    /**
+     * Allow only http(s) URLs for outbound links shown in Moodle UI.
+     *
+     * @param string $url
+     * @return string Empty string when unsafe / invalid
+     */
+    public static function sanitise_external_url(string $url): string {
+        $url = trim($url);
+        if ($url === '') {
+            return '';
+        }
+        $url = clean_param($url, PARAM_URL);
+        if ($url === '') {
+            return '';
+        }
+        $parts = parse_url($url);
+        if ($parts === false || empty($parts['scheme'])) {
+            return '';
+        }
+        if (!in_array(strtolower((string) $parts['scheme']), ['http', 'https'], true)) {
+            return '';
+        }
+        return $url;
     }
 }

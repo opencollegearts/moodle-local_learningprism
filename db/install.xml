@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<XMLDB PATH="local/learningprism/db" VERSION="2026102214" COMMENT="XMLDB file for Moodle local/learningprism"
+<XMLDB PATH="local/learningprism/db" VERSION="2026110302" COMMENT="XMLDB file for Moodle local/learningprism"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xsi:noNamespaceSchemaLocation="../../../lib/xmldb/xmldb.xsd"
 >
@@ -58,6 +58,100 @@
       </KEYS>
       <INDEXES>
         <INDEX NAME="userididx" UNIQUE="false" FIELDS="userid"/>
+      </INDEXES>
+    </TABLE>
+    <TABLE NAME="local_learningprism_notebook" COMMENT="One Gemini Notebook Enterprise notebook per course.">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="courseid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="notebookid" TYPE="char" LENGTH="128" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="name" TYPE="char" LENGTH="255" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="url" TYPE="text" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="sharemode" TYPE="char" LENGTH="20" NOTNULL="true" DEFAULT="group" SEQUENCE="false"/>
+        <FIELD NAME="groupemail" TYPE="char" LENGTH="255" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="status" TYPE="char" LENGTH="20" NOTNULL="true" DEFAULT="queued" SEQUENCE="false"/>
+        <FIELD NAME="errorinfo" TYPE="text" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="skipinfo" TYPE="text" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="courseiduk" TYPE="unique" FIELDS="courseid"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="statusidx" UNIQUE="false" FIELDS="status"/>
+      </INDEXES>
+    </TABLE>
+    <TABLE NAME="local_learningprism_nbsource" COMMENT="Sources uploaded to a course Google notebook.">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="notebookid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="sourcetype" TYPE="char" LENGTH="20" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="cmid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="fileid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="contenthash" TYPE="char" LENGTH="40" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="gsourceid" TYPE="char" LENGTH="128" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="displayname" TYPE="char" LENGTH="255" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="status" TYPE="char" LENGTH="20" NOTNULL="true" DEFAULT="queued" SEQUENCE="false"/>
+        <FIELD NAME="errorinfo" TYPE="text" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="fk_notebookid" TYPE="foreign" FIELDS="notebookid" REFTABLE="local_learningprism_notebook" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="sourcekeyidx" UNIQUE="true" FIELDS="notebookid, sourcetype, cmid, fileid"/>
+      </INDEXES>
+    </TABLE>
+    <TABLE NAME="local_learningprism_archive" COMMENT="One Google Drive course archive per course.">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="courseid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="folderid" TYPE="char" LENGTH="128" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="url" TYPE="text" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="sharemode" TYPE="char" LENGTH="20" NOTNULL="true" DEFAULT="group" SEQUENCE="false"/>
+        <FIELD NAME="groupemail" TYPE="char" LENGTH="255" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="status" TYPE="char" LENGTH="20" NOTNULL="true" DEFAULT="queued" SEQUENCE="false"/>
+        <FIELD NAME="errorinfo" TYPE="text" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="skipinfo" TYPE="text" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="courseiduk" TYPE="unique" FIELDS="courseid"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="statusidx" UNIQUE="false" FIELDS="status"/>
+      </INDEXES>
+    </TABLE>
+    <TABLE NAME="local_learningprism_archiveitem" COMMENT="Files uploaded to a course Google Drive archive.">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="archiveid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="sectionnum" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="itemindex" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="sourcetype" TYPE="char" LENGTH="20" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="cmid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="fileid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="contenthash" TYPE="char" LENGTH="40" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="drivefileid" TYPE="char" LENGTH="128" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="displayname" TYPE="char" LENGTH="255" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="sectionfolder" TYPE="char" LENGTH="255" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="status" TYPE="char" LENGTH="20" NOTNULL="true" DEFAULT="queued" SEQUENCE="false"/>
+        <FIELD NAME="errorinfo" TYPE="text" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="fk_archiveid" TYPE="foreign" FIELDS="archiveid" REFTABLE="local_learningprism_archive" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="itemkeyidx" UNIQUE="true" FIELDS="archiveid, sourcetype, sectionnum, cmid, fileid"/>
       </INDEXES>
     </TABLE>
   </TABLES>

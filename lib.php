@@ -131,6 +131,48 @@ function local_learningprism_extend_navigation_course($navigation, $course, $con
             'local_learningprism_pregenerate'
         );
     }
+    if (\local_learningprism\local\notebook\settings::enabled()) {
+        if (has_capability('local/learningprism:manage', $context)) {
+            $navigation->add(
+                get_string('notebook:heading', 'local_learningprism'),
+                new moodle_url('/local/learningprism/notebook.php', ['id' => $course->id]),
+                navigation_node::TYPE_SETTING,
+                null,
+                'local_learningprism_notebook'
+            );
+        }
+        $notebookurl = \local_learningprism\local\notebook\sync_manager::public_url((int) $course->id);
+        if ($notebookurl && has_capability('local/learningprism:viewnotebook', $context)) {
+            $navigation->add(
+                get_string('notebook:open', 'local_learningprism'),
+                new moodle_url($notebookurl),
+                navigation_node::TYPE_CUSTOM,
+                null,
+                'local_learningprism_notebook_open'
+            );
+        }
+    }
+    if (\local_learningprism\local\archive\settings::enabled()) {
+        if (has_capability('local/learningprism:manage', $context)) {
+            $navigation->add(
+                get_string('archive:heading', 'local_learningprism'),
+                new moodle_url('/local/learningprism/archive.php', ['id' => $course->id]),
+                navigation_node::TYPE_SETTING,
+                null,
+                'local_learningprism_archive'
+            );
+        }
+        $archiveurl = \local_learningprism\local\archive\sync_manager::public_url((int) $course->id);
+        if ($archiveurl && has_capability('local/learningprism:viewarchive', $context)) {
+            $navigation->add(
+                get_string('archive:open', 'local_learningprism'),
+                new moodle_url($archiveurl),
+                navigation_node::TYPE_CUSTOM,
+                null,
+                'local_learningprism_archive_open'
+            );
+        }
+    }
 }
 
 // Intentionally no local_learningprism_before_standard_html_head().

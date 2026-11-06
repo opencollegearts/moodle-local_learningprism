@@ -46,6 +46,7 @@ $capabilities = [
         ],
     ],
     'local/learningprism:download' => [
+        'riskbitmask' => RISK_PERSONAL,
         'captype' => 'read',
         'contextlevel' => CONTEXT_MODULE,
         'archetypes' => [
@@ -61,6 +62,24 @@ $capabilities = [
         'contextlevel' => CONTEXT_COURSE,
         'archetypes' => [
             'teacher' => CAP_ALLOW,
+            'editingteacher' => CAP_ALLOW,
+            'manager' => CAP_ALLOW,
+        ],
+    ],
+    'local/learningprism:viewnotebook' => [
+        'captype' => 'read',
+        'contextlevel' => CONTEXT_COURSE,
+        'archetypes' => [
+            'student' => CAP_ALLOW,
+            'teacher' => CAP_ALLOW,
+            'editingteacher' => CAP_ALLOW,
+            'manager' => CAP_ALLOW,
+        ],
+    ],
+    'local/learningprism:viewarchive' => [
+        'captype' => 'read',
+        'contextlevel' => CONTEXT_COURSE,
+        'archetypes' => [
             'editingteacher' => CAP_ALLOW,
             'manager' => CAP_ALLOW,
         ],

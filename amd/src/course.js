@@ -357,7 +357,7 @@ define([
         }
         injecting[key] = true;
         if (place === 'card') {
-            anchor.classList.add('lp-has-prism-control');
+            anchor.classList.add('local-learningprism-has-control');
         }
         Templates.render('local_learningprism/control_icon', {
             cmid: instance.cmid,
@@ -472,8 +472,39 @@ define([
         }
     };
 
-    var init = function(courseId, canManage) {
+    var injectNotebookBanner = function(notebook) {
+        if (!notebook || !notebook.show) {
+            return;
+        }
+        if (document.querySelector('.local-learningprism-notebook')) {
+            return;
+        }
+        var host = document.querySelector('#region-main .course-content') ||
+            document.querySelector('.course-content') ||
+            document.querySelector('#region-main') ||
+            document.querySelector('#course-toc') ||
+            document.body;
+        if (!host) {
+            return;
+        }
+        Templates.render('local_learningprism/notebook_banner', notebook).then(function(html) {
+            if (document.querySelector('.local-learningprism-notebook')) {
+                return;
+            }
+            var wrap = document.createElement('div');
+            wrap.innerHTML = html;
+            var banner = wrap.firstElementChild;
+            if (banner) {
+                host.insertBefore(banner, host.firstChild);
+            }
+        }).catch(function() {
+            // Optional control — do not break activity icons.
+        });
+    };
+
+    var init = function(courseId, canManage, notebook) {
         pageCourseId = courseId;
+        injectNotebookBanner(notebook || {});
 
         Str.get_strings([
             {key: 'icon:request', component: 'local_learningprism'},

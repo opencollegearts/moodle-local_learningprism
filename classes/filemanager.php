@@ -112,4 +112,54 @@ class filemanager {
         $fs = get_file_storage();
         $fs->delete_area_files(context_system::instance()->id, manager::COMPONENT, manager::FILEAREA, $jobid);
     }
+
+    /**
+     * Store a DOCX built for a Drive archive item.
+     *
+     * @param int $itemid Archive item id
+     * @param string $filename
+     * @param string $content Binary DOCX
+     * @return stored_file
+     */
+    public static function store_archive_file(int $itemid, string $filename, string $content): stored_file {
+        $fs = get_file_storage();
+        $contextid = context_system::instance()->id;
+        $fs->delete_area_files($contextid, manager::COMPONENT, manager::FILEAREA_ARCHIVE, $itemid);
+        $record = [
+            'contextid' => $contextid,
+            'component' => manager::COMPONENT,
+            'filearea' => manager::FILEAREA_ARCHIVE,
+            'itemid' => $itemid,
+            'filepath' => '/',
+            'filename' => $filename,
+            'mimetype' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        ];
+        return $fs->create_file_from_string($record, $content);
+    }
+
+    /**
+     * @param int $itemid
+     * @return stored_file|null
+     */
+    public static function get_archive_file(int $itemid): ?stored_file {
+        $fs = get_file_storage();
+        $files = $fs->get_area_files(
+            context_system::instance()->id,
+            manager::COMPONENT,
+            manager::FILEAREA_ARCHIVE,
+            $itemid,
+            'filename',
+            false
+        );
+        $file = reset($files);
+        return $file ?: null;
+    }
+
+    /**
+     * @param int $itemid
+     */
+    public static function delete_archive_files(int $itemid): void {
+        $fs = get_file_storage();
+        $fs->delete_area_files(context_system::instance()->id, manager::COMPONENT, manager::FILEAREA_ARCHIVE, $itemid);
+    }
 }

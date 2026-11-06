@@ -80,6 +80,8 @@ class docx_converter implements converter_interface {
         $options = html_normalizer::normalise_print_options($options);
         $this->fontname = html_normalizer::print_font_docx($options['font']);
         $this->bghex = ltrim(html_normalizer::print_background_hex($options['printbackground']), '#');
+        // Word does not reliably display SVG image parts; rasterise first.
+        $html = image_helper::rasterise_svg_data_uris($html);
         $documentxml = $this->html_to_document_xml($html);
         $tmpdir = make_request_directory();
         $docxpath = $tmpdir . '/output.docx';

@@ -93,6 +93,7 @@ class job_manager {
      * @param bool $forceregenerate Re-queue ready files as well as errors/missing.
      * @param bool $personal User-only print version (colour/font).
      * @param array $printoptions printbackground / font keys when $personal
+     * @param bool $ignoreenabled Queue even when the format is hidden from the UI
      * @return \stdClass[] jobs
      */
     public static function queue_formats(
@@ -101,7 +102,8 @@ class job_manager {
         int $userid,
         bool $forceregenerate = false,
         bool $personal = false,
-        array $printoptions = []
+        array $printoptions = [],
+        bool $ignoreenabled = false
     ): array {
         global $DB;
 
@@ -146,8 +148,14 @@ class job_manager {
         }
 
         foreach ($formats as $format) {
-            if (!in_array($format, $enabled, true)) {
+            if (!$ignoreenabled && !in_array($format, $enabled, true)) {
                 continue;
+            }
+            if ($format === manager::FORMAT_PDF) {
+                $engine = get_config('local_learningprism', 'pdfengine');
+                if (!$engine || $engine === 'none') {
+                    continue;
+                }
             }
             if ($personal && !manager::is_print_format($format)) {
                 continue;
@@ -470,6 +478,25 @@ class job_manager {
             'fonts' => $fonts,
             'formats' => $result,
         ];
+    }
+
+    /**
+     * Ensure a shared (non-personal) conversion exists for notebook upload.
+     *
+     * @param int $cmid
+     * @param string $format
+     * @param int $userid
+     * @return \stdClass|null
+     */
+    public static function ensure_shared_format(int $cmid, string $format, int $userid): ?\stdClass {
+        if (!in_array($format, [manager::FORMAT_DOCX, manager::FORMAT_PDF], true)) {
+            return null;
+        }
+        $jobs = self::queue_formats($cmid, [$format], $userid, false, false, [], true);
+        if (!$jobs) {
+            return null;
+        }
+        return reset($jobs) ?: null;
     }
 
     /**

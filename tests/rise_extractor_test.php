@@ -60,6 +60,12 @@ class rise_extractor_test extends \advanced_testcase {
         $this->assertStringContainsString('<h3>A heading</h3>', $html);
         $this->assertStringContainsString('Body copy', $html);
         $this->assertStringNotContainsString('When we show up to the present moment', $html);
+        $this->assertStringNotContainsString('>Heading<', $html);
+        $this->assertStringContainsString('<h3>Exercises:</h3>', $html);
+        $this->assertStringNotContainsString('<h3>Exercises</h3>', $html);
+        $this->assertStringContainsString('Exercises are designed', $html);
+        $this->assertMatchesRegularExpression('/<h3[^>]*>[\s\S]*?Exercise X[\s\S]*?<\/h3>/', $html);
+        $this->assertStringContainsString('No need to worry if you close this window.', $html);
         $this->assertStringContainsString('<ul>', $html);
         $this->assertStringContainsString('Quoted', $html);
         $this->assertStringContainsString('data:image/png;base64,abc', $html);
@@ -113,7 +119,24 @@ class rise_extractor_test extends \advanced_testcase {
                             'type' => 'text',
                             'variant' => 'paragraph',
                             'items' => [[
+                                'heading' => '<strong>Heading</strong>',
                                 'paragraph' => '<div data-editor-id="p"><p>Body copy.</p></div>',
+                            ]],
+                        ],
+                        [
+                            'type' => 'text',
+                            'variant' => 'heading',
+                            'items' => [[
+                                'heading' => '<div data-editor-id="e"><p>Exercises:</p></div>',
+                                'paragraph' => '<p>When we show up to the present moment with all of our senses, we invite the world to fill us with joy.</p>',
+                            ]],
+                        ],
+                        [
+                            'type' => 'text',
+                            'variant' => 'paragraph',
+                            'items' => [[
+                                'heading' => '<div data-editor-id="e2"><p><strong>Exercises</strong></p></div>',
+                                'paragraph' => '<div data-editor-id="e3"><p>Exercises are designed to help you explore topics.</p></div>',
                             ]],
                         ],
                         [
@@ -129,6 +152,14 @@ class rise_extractor_test extends \advanced_testcase {
                             'items' => [[
                                 'paragraph' => '<p>Quoted</p>',
                                 'name' => '<p>Author</p>',
+                            ]],
+                        ],
+                        [
+                            'type' => 'quote',
+                            'variant' => 'd',
+                            'items' => [[
+                                'paragraph' => '<div data-editor-id="ex"><p><span style="font-size: 2.8rem"><strong>Exercise X</strong></span></p>'
+                                    . '<p><span style="font-size: 1.7rem"><strong>No need to worry if you close this window.</strong></span></p></div>',
                             ]],
                         ],
                         [

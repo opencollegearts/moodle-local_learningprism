@@ -32,7 +32,7 @@
 }
 
 /* Activity cards: always the same top-right spot, left of the kebab / chevron. */
-.lp-has-prism-control {
+.local-learningprism-has-control {
     position: relative;
 }
 
@@ -97,4 +97,16 @@ button.btn-link.local-learningprism-button.lp-state-error {
 
 .local-learningprism-modal .lp-actions > .btn {
     margin: 0 0.75rem 0.5rem 0;
+}
+
+.local-learningprism-notebook {
+    margin: 0 0 1rem 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 0.75rem;
+}
+
+.local-learningprism-notebook .lp-notebook-status {
+    margin-right: 0.25rem;
 }

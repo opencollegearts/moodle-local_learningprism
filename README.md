@@ -319,6 +319,83 @@ Treat the JSON as a secret. If it leaks, delete that key in GCP (**Keys → Dele
 2. Open **Voices**, pick a voice, and copy its **Voice ID**.
 3. In Moodle, set **TTS provider** to **ElevenLabs**, paste the `sk_…` key and Voice ID, enable **TTS audio format**, and save.
 
+## Google Notebook (optional, v1.2)
+
+Teachers can generate a **Gemini Notebook Enterprise** notebook for a course. Learning Prism converts Book, Page, Label, and Articulate Rise SCORM activities to **Word** (or **PDF** if a PDF engine is configured), then uploads those files plus any visible File or Folder resources that are **PDF, DOCX, MP3, or MP4**.
+
+This uses Google’s NotebookLM Enterprise API (Discovery Engine `v1alpha`, Pre-GA). It is **not** consumer NotebookLM (`notebooklm.google.com`). A public link will not work.
+
+### What you need
+
+1. A Google Cloud project with [Gemini Notebook Enterprise](https://docs.cloud.google.com/gemini/enterprise/notebooklm-enterprise/docs/set-up-notebooklm) set up and the Discovery Engine API enabled.
+2. [NotebookLM Enterprise licences](https://docs.cloud.google.com/gemini/enterprise/notebooklm-enterprise/docs/set-up-licensing) for people who will open the notebook.
+3. The **Cloud NotebookLM User** IAM role (`roles/discoveryengine.notebookLmUser`) for those users.
+4. A **service account** with **Cloud NotebookLM Admin** (`roles/discoveryengine.notebookLmOwner`) on the project, in the **same location** as the Moodle setting (`global`, `us`, or `eu`). A TTS-only account is not enough — Google will deny `discoveryengine.notebooks.create`. You can reuse the Text-to-Speech JSON if you grant that extra role, or paste a second JSON in **Notebook service account JSON**.
+5. The numeric **project number** (not the project ID string).
+6. Gemini Notebook Enterprise actually created in that location (the API error also says “or it may not exist” when the product is not set up for `eu` / `us` / `global`).
+
+### Moodle settings
+
+**Site administration → Plugins → Local plugins → OCA Learning Prism:**
+
+1. Tick **Enable Google Notebook** only if you have Gemini Notebook Enterprise (NotebookLM Enterprise) seats. Education Plus and consumer NotebookLM are not enough — every user a notebook is shared with also needs an Enterprise licence.
+2. Set **Google Cloud project number**, **Notebook location** (`global`, `us`, or `eu`), and **Notebook identity host** (Google identity vs third-party IdP).
+3. Leave **Converted activity format** as **Word (DOCX)** unless PDF is configured and you prefer PDF.
+4. Save.
+
+### Course use
+
+1. Enable Learning Prism on the course.
+2. Open **Google Notebook** from course navigation.
+3. Prefer **Share with → Google Group** and enter the class group email. If you use **Course participants**, each Moodle email must match that user’s Google Workspace / IdP email.
+4. Click **Generate or refresh notebook**. Cron (or **Sync Learning Prism Google Notebooks → Run now**) converts activities, uploads sources, then shares the notebook.
+5. When status is **Ready**, students and teachers with `local/learningprism:viewnotebook` see **Open Google Notebook** on the course page and in navigation.
+
+Uploads are incremental (content hash). Removed activities/files are dropped from the notebook on refresh. Google limits notebooks to 300 sources and 500 MB per source; oversized or extra files are listed as skipped.
+
+## Google Drive archive (optional, v1.3)
+
+Teachers can generate an **indexed course archive** in Google Drive. Each Moodle section becomes a numbered folder (`01_Week 1`). Inside it, documents are numbered (`01_Section overview.docx`, `02_Activity.docx`). Content includes section descriptions, Assignments (title, description, activity instructions), Forums (title, description), Book/Page/Label/Rise as DOCX, and native PDF/DOCX File/Folder resources. Audio and video are skipped.
+
+Refresh **deletes and recreates** the course folder, then re-applies sharing.
+
+### What you need
+
+1. A Google Cloud **service account** JSON key (you can reuse the TTS JSON or paste a dedicated archive JSON).
+2. Google Workspace **domain-wide delegation** for that service account’s **Client ID**, allowed to impersonate the delegated user (default `extranet@oca.ac.uk`), with scopes:
+   - `https://www.googleapis.com/auth/drive` (required)
+   - `https://www.googleapis.com/auth/admin.directory.group` (for **Google Group (create if missing)**)
+   - `https://www.googleapis.com/auth/admin.directory.group.member` (to add/remove enrolled users in that group)
+   - `https://www.googleapis.com/auth/apps.groups.settings` (to lock posting/membership visibility to members only)
+3. Enable the **Groups Settings API** on the Google Cloud project.
+4. The delegated user must be able to own files in My Drive (or under an optional parent folder ID). For group create/membership sync, that user also needs permission to create groups and manage members/settings.
+
+In [Google Admin → Security → API controls → Domain-wide delegation](https://admin.google.com/ac/owl/domainwidedelegation), add the service account client ID and the scopes above.
+
+Created groups are locked so only **members** (plus owners/managers) can post, view members, view conversations, and contact owners — not the whole organisation or external users. Join is invite-only (Learning Prism manages membership).
+
+### Moodle settings
+
+**Site administration → Plugins → Local plugins → OCA Learning Prism:**
+
+1. Tick **Enable Google Drive archive**.
+2. Optionally paste **Archive service account JSON** (otherwise the TTS JSON is reused).
+3. Set **Delegated Workspace user** (default `extranet@oca.ac.uk`).
+4. Optionally set a **Parent Drive folder ID**.
+5. Save.
+
+### Course use
+
+1. Enable Learning Prism on the course.
+2. Open **Google Drive archive** from course navigation.
+3. Choose **Share with**:
+   - **Existing Google Group** — viewer access for a group email you enter
+   - **Google Group (create if missing)** — creates the group if needed, syncs enrolled users into group membership, then shares the folder with the group; **Update sharing** and enrolment changes re-sync membership
+   - **Course participants** — viewer access for each enrolled Moodle email; refreshed automatically on enrol/unenrol
+   - **Anyone with the link can view** — link-readable folder (may be blocked by Workspace policy)
+4. Click **Generate or refresh archive** (or **Update sharing** only). Cron (or **Sync Learning Prism Google Drive archives → Run now**) converts, uploads, then shares.
+5. When status is **Ready**, staff with `local/learningprism:viewarchive` can open the Drive folder.
+
 ## Capabilities
 
 | Capability | Default | Purpose |
@@ -327,6 +404,23 @@ Treat the JSON as a secret. If it leaks, delete that key in GCP (**Keys → Dele
 | `local/learningprism:request` | student+ | Queue missing formats |
 | `local/learningprism:download` | student+ | Download ready files |
 | `local/learningprism:viewreport` | teacher+ | View course job report |
+| `local/learningprism:viewnotebook` | student+ | Open the course Google Notebook URL when it is ready |
+| `local/learningprism:viewarchive` | editingteacher, manager | Open the course Google Drive archive folder when ready |
+
+## Privacy and external services
+
+Learning Prism implements Moodle’s **Privacy API** (metadata, export, and delete). Personal data may include conversion job records, request/download audit rows, personal print preferences, and the teacher who queued a notebook or Drive archive.
+
+**Optional paid / external services** (clearly optional — DOCX and EPUB need none of these):
+
+| Service | Data that may leave Moodle | Notes |
+|---------|----------------------------|--------|
+| Gotenberg / WeasyPrint | Activity HTML for PDF | Self-hosted; not a Marketplace paid add-on |
+| Google Cloud TTS / ElevenLabs | Plain text for speech | Requires your own API credentials |
+| Gemini Notebook Enterprise | Course files; emails when sharing | Google Cloud licences; credentials in plugin settings |
+| Google Drive (Workspace DWD) | Course documents; share emails | Domain-wide delegation to a Workspace user |
+
+Site admins configure credentials under the plugin settings. See those sections above for how to obtain keys. For Marketplace review, provide demo credentials if Notebook/Drive/TTS features should be exercised.
 
 ## Accessibility notes
 
@@ -342,6 +436,8 @@ Treat the JSON as a secret. If it leaks, delete that key in GCP (**Keys → Dele
 
 - **Process Learning Prism conversion jobs** — every minute
 - **Purge stale Learning Prism files** — daily (removes ready files whose content hash no longer matches)
+- **Sync Learning Prism Google Notebooks** — every minute (one source upload per run when a course notebook is queued)
+- **Sync Learning Prism Google Drive archives** — every minute (one file upload per run when a course archive is queued)
 
 ## Development
 
@@ -359,4 +455,4 @@ npx grunt amd --root=local/learningprism
 
 ## Architecture (short)
 
-Course enable flag → course-page AMD injects controls on book/page/label/Rise SCORM → AJAX queues jobs → converters run (DOCX/EPUB local zip; PDF/TTS external) → files stored in `local_learningprism` file area → pluginfile download with capability checks.
+Course enable flag → course-page AMD injects controls on book/page/label/Rise SCORM → AJAX queues jobs → converters run (DOCX/EPUB local zip; PDF/TTS external) → files stored in `local_learningprism` file area → pluginfile download with capability checks. Optional: teacher queues a course Google Notebook → conversions + native PDF/DOCX/MP3/MP4 uploads to NotebookLM Enterprise → shared URL on the course page. Optional: teacher queues a Google Drive archive → section folders with indexed DOCX/PDF via domain-wide delegation → Drive folder URL for staff.

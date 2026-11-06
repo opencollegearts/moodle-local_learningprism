@@ -29,6 +29,12 @@ class rise_extractor {
     /** Rise default body used on heading-only blocks. */
     private const PLACEHOLDER_BODY = 'When we show up to the present moment with all of our senses';
 
+    /** Rise default unused heading field shown in the editor as empty. */
+    private const PLACEHOLDER_HEADING = 'Heading';
+
+    /** Promote Rise paragraphs at or above this rem font-size to headings. */
+    private const LARGE_TYPE_REM = 2.0;
+
     /**
      * Whether the file looks like a Rise LMS export runtime payload.
      *
@@ -94,7 +100,7 @@ class rise_extractor {
                 }
             }
         }
-        return $html;
+        return self::collapse_adjacent_headings($html);
     }
 
     /**
@@ -230,6 +236,15 @@ class rise_extractor {
                 continue;
             }
             $cite = self::plain_text((string) ($item['name'] ?? ''));
+            // Rise often uses quote blocks for large-type exercise callouts; keep those
+            // as semantic headings + body rather than blockquotes.
+            if (preg_match('/<h[1-6]\b/i', $para)) {
+                $out .= $para;
+                if ($cite !== '') {
+                    $out .= '<p><em>' . self::esc($cite) . '</em></p>';
+                }
+                continue;
+            }
             $out .= '<blockquote>' . $para;
             if ($cite !== '') {
                 $out .= '<footer>' . self::esc($cite) . '</footer>';
@@ -522,7 +537,118 @@ class rise_extractor {
         if ($html === '' || self::is_placeholder($html)) {
             return '';
         }
+        return self::promote_large_type($html);
+    }
+
+    /**
+     * Turn Rise paragraphs styled at ~heading size into real heading elements.
+     *
+     * @param string $html
+     * @return string
+     */
+    private static function promote_large_type(string $html): string {
+        if (!preg_match('/font-size\s*:/i', $html)) {
+            return $html;
+        }
+        return preg_replace_callback('#<p\b[^>]*>.*?</p>#is', static function (array $matches): string {
+            $paragraph = $matches[0];
+            if (!self::paragraph_is_large_type($paragraph)) {
+                return $paragraph;
+            }
+            $inner = preg_replace('#^<p\b[^>]*>#i', '', $paragraph) ?? $paragraph;
+            $inner = preg_replace('#</p>$#i', '', $inner) ?? $inner;
+            $inner = self::strip_size_styles($inner);
+            $text = self::plain_text($inner);
+            if ($text === '' || self::is_placeholder($inner)) {
+                return '';
+            }
+            return '<h3>' . $inner . '</h3>';
+        }, $html) ?? $html;
+    }
+
+    /**
+     * @param string $paragraphhtml
+     * @return bool
+     */
+    private static function paragraph_is_large_type(string $paragraphhtml): bool {
+        if (preg_match_all('/font-size\s*:\s*([\d.]+)\s*(rem|em|px|pt)/i', $paragraphhtml, $matches, PREG_SET_ORDER)) {
+            foreach ($matches as $match) {
+                $value = (float) $match[1];
+                $unit = strtolower($match[2]);
+                if ($unit === 'rem' || $unit === 'em') {
+                    if ($value >= self::LARGE_TYPE_REM) {
+                        return true;
+                    }
+                } else if ($unit === 'px' && $value >= 26) {
+                    return true;
+                } else if ($unit === 'pt' && $value >= 20) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Remove font-size declarations once type has been promoted to a heading.
+     *
+     * @param string $html
+     * @return string
+     */
+    private static function strip_size_styles(string $html): string {
+        $html = preg_replace('/\s*font-size\s*:\s*[^;"]+;?/i', '', $html) ?? $html;
+        $html = preg_replace('/\sstyle="\s*"/i', '', $html) ?? $html;
         return $html;
+    }
+
+    /**
+     * Drop consecutive headings that are the same after normalising punctuation
+     * (e.g. Rise heading block "Exercises:" followed by paragraph heading "Exercises").
+     *
+     * @param string $html
+     * @return string
+     */
+    private static function collapse_adjacent_headings(string $html): string {
+        if ($html === '' || !preg_match_all('/<h([1-6])\b[^>]*>.*?<\/h\1>/is', $html, $matches, PREG_OFFSET_CAPTURE)) {
+            return $html;
+        }
+        $lastnorm = null;
+        $lastend = -1;
+        $remove = [];
+        foreach ($matches[0] as $match) {
+            $tag = $match[0];
+            $start = (int) $match[1];
+            $norm = self::normalise_heading_key(strip_tags($tag));
+            $bridge = false;
+            if ($lastend >= 0) {
+                $between = substr($html, $lastend, $start - $lastend);
+                // Treat whitespace and <hr> as still "adjacent" for deduping.
+                $bridge = (bool) preg_match('/^(?:\s|<hr\b[^>]*>)*$/is', $between);
+            }
+            if ($bridge && $lastnorm !== null && $norm !== '' && $norm === $lastnorm) {
+                $remove[] = [$start, strlen($tag)];
+            } else if ($norm !== '') {
+                $lastnorm = $norm;
+            } else {
+                $lastnorm = null;
+            }
+            $lastend = $start + strlen($tag);
+        }
+        foreach (array_reverse($remove) as [$start, $length]) {
+            $html = substr($html, 0, $start) . substr($html, $start + $length);
+        }
+        return $html;
+    }
+
+    /**
+     * @param string $text
+     * @return string
+     */
+    private static function normalise_heading_key(string $text): string {
+        $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $text = trim(preg_replace('/\s+/', ' ', $text) ?? '');
+        $text = rtrim($text, " \t.:;!-");
+        return function_exists('mb_strtolower') ? mb_strtolower($text, 'UTF-8') : strtolower($text);
     }
 
     /**
@@ -558,6 +684,9 @@ class rise_extractor {
     private static function is_placeholder(string $html): bool {
         $text = self::plain_text($html);
         if ($text === '') {
+            return true;
+        }
+        if (strcasecmp($text, self::PLACEHOLDER_HEADING) === 0) {
             return true;
         }
         if (strpos($text, self::PLACEHOLDER_BODY) !== false) {

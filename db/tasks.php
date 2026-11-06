@@ -43,4 +43,22 @@ $tasks = [
         'month' => '*',
         'dayofweek' => '*',
     ],
+    [
+        'classname' => 'local_learningprism\\task\\sync_notebooks',
+        'blocking' => 0,
+        'minute' => '*',
+        'hour' => '*',
+        'day' => '*',
+        'month' => '*',
+        'dayofweek' => '*',
+    ],
+    [
+        'classname' => 'local_learningprism\\task\\sync_archives',
+        'blocking' => 0,
+        'minute' => '*',
+        'hour' => '*',
+        'day' => '*',
+        'month' => '*',
+        'dayofweek' => '*',
+    ],
 ];

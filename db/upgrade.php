@@ -126,5 +126,129 @@ function xmldb_local_learningprism_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026102700, 'local', 'learningprism');
     }
 
+    if ($oldversion < 2026102712) {
+        $table = new xmldb_table('local_learningprism_notebook');
+        $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $table->add_field('courseid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('notebookid', XMLDB_TYPE_CHAR, '128', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('name', XMLDB_TYPE_CHAR, '255', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('url', XMLDB_TYPE_TEXT, null, null, null, null, null);
+        $table->add_field('sharemode', XMLDB_TYPE_CHAR, '20', null, XMLDB_NOTNULL, null, 'group');
+        $table->add_field('groupemail', XMLDB_TYPE_CHAR, '255', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('status', XMLDB_TYPE_CHAR, '20', null, XMLDB_NOTNULL, null, 'queued');
+        $table->add_field('errorinfo', XMLDB_TYPE_TEXT, null, null, null, null, null);
+        $table->add_field('skipinfo', XMLDB_TYPE_TEXT, null, null, null, null, null);
+        $table->add_field('userid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('timecreated', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('timemodified', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+        $table->add_key('courseiduk', XMLDB_KEY_UNIQUE, ['courseid']);
+        $table->add_index('statusidx', XMLDB_INDEX_NOTUNIQUE, ['status']);
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+
+        $table = new xmldb_table('local_learningprism_nbsource');
+        $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $table->add_field('notebookid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('sourcetype', XMLDB_TYPE_CHAR, '20', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('cmid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('fileid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('contenthash', XMLDB_TYPE_CHAR, '40', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('gsourceid', XMLDB_TYPE_CHAR, '128', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('displayname', XMLDB_TYPE_CHAR, '255', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('status', XMLDB_TYPE_CHAR, '20', null, XMLDB_NOTNULL, null, 'queued');
+        $table->add_field('errorinfo', XMLDB_TYPE_TEXT, null, null, null, null, null);
+        $table->add_field('timemodified', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+        $table->add_key('fk_notebookid', XMLDB_KEY_FOREIGN, ['notebookid'], 'local_learningprism_notebook', ['id']);
+        $table->add_index('sourcekeyidx', XMLDB_INDEX_UNIQUE, ['notebookid', 'sourcetype', 'cmid', 'fileid']);
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+
+        upgrade_plugin_savepoint(true, 2026102712, 'local', 'learningprism');
+    }
+
+    if ($oldversion < 2026102713) {
+        upgrade_plugin_savepoint(true, 2026102713, 'local', 'learningprism');
+    }
+
+    if ($oldversion < 2026102714) {
+        upgrade_plugin_savepoint(true, 2026102714, 'local', 'learningprism');
+    }
+
+    if ($oldversion < 2026110300) {
+        upgrade_plugin_savepoint(true, 2026110300, 'local', 'learningprism');
+    }
+
+    if ($oldversion < 2026110301) {
+        $table = new xmldb_table('local_learningprism_archive');
+        $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $table->add_field('courseid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('folderid', XMLDB_TYPE_CHAR, '128', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('url', XMLDB_TYPE_TEXT, null, null, null, null, null);
+        $table->add_field('sharemode', XMLDB_TYPE_CHAR, '20', null, XMLDB_NOTNULL, null, 'group');
+        $table->add_field('groupemail', XMLDB_TYPE_CHAR, '255', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('status', XMLDB_TYPE_CHAR, '20', null, XMLDB_NOTNULL, null, 'queued');
+        $table->add_field('errorinfo', XMLDB_TYPE_TEXT, null, null, null, null, null);
+        $table->add_field('skipinfo', XMLDB_TYPE_TEXT, null, null, null, null, null);
+        $table->add_field('userid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('timecreated', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('timemodified', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+        $table->add_key('courseiduk', XMLDB_KEY_UNIQUE, ['courseid']);
+        $table->add_index('statusidx', XMLDB_INDEX_NOTUNIQUE, ['status']);
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+
+        $table = new xmldb_table('local_learningprism_archiveitem');
+        $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $table->add_field('archiveid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('sectionnum', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('itemindex', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('sourcetype', XMLDB_TYPE_CHAR, '20', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('cmid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('fileid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('contenthash', XMLDB_TYPE_CHAR, '40', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('drivefileid', XMLDB_TYPE_CHAR, '128', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('displayname', XMLDB_TYPE_CHAR, '255', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('sectionfolder', XMLDB_TYPE_CHAR, '255', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('status', XMLDB_TYPE_CHAR, '20', null, XMLDB_NOTNULL, null, 'queued');
+        $table->add_field('errorinfo', XMLDB_TYPE_TEXT, null, null, null, null, null);
+        $table->add_field('timemodified', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+        $table->add_key('fk_archiveid', XMLDB_KEY_FOREIGN, ['archiveid'], 'local_learningprism_archive', ['id']);
+        $table->add_index('itemkeyidx', XMLDB_INDEX_UNIQUE, ['archiveid', 'sourcetype', 'sectionnum', 'cmid', 'fileid']);
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+
+        upgrade_plugin_savepoint(true, 2026110301, 'local', 'learningprism');
+    }
+
+    if ($oldversion < 2026110302) {
+        $table = new xmldb_table('local_learningprism_archive');
+        $field = new xmldb_field('sharemode', XMLDB_TYPE_CHAR, '20', null, XMLDB_NOTNULL, null, 'group', 'url');
+        if ($dbman->table_exists($table) && !$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+        // CHAR NOTNULL must not use '' as DEFAULT (XMLDB debugging / Whoops).
+        $field = new xmldb_field('groupemail', XMLDB_TYPE_CHAR, '255', null, XMLDB_NOTNULL, null, null, 'sharemode');
+        if ($dbman->table_exists($table) && !$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+        upgrade_plugin_savepoint(true, 2026110302, 'local', 'learningprism');
+    }
+
+    if ($oldversion < 2026110303) {
+        upgrade_plugin_savepoint(true, 2026110303, 'local', 'learningprism');
+    }
+
+    if ($oldversion < 2026110304) {
+        upgrade_plugin_savepoint(true, 2026110304, 'local', 'learningprism');
+    }
+
     return true;
 }

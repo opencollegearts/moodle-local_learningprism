@@ -16,6 +16,8 @@
 
 namespace local_learningprism\local\tts;
 
+use local_learningprism\local\gcp\access_token;
+
 defined('MOODLE_INTERNAL') || die();
 
 /**
@@ -33,8 +35,8 @@ class google_provider implements tts_provider_interface {
     private const CHUNK_SIZE = 4000;
 
     public function is_configured(): bool {
-        $json = get_config('local_learningprism', 'gcpcredentials');
-        return !empty($json) && !empty(json_decode($json));
+        $json = access_token::tts_json();
+        return $json !== '' && !empty(json_decode($json, true));
     }
 
     public function synthesize(string $text, array $options = []): string {
@@ -52,7 +54,7 @@ class google_provider implements tts_provider_interface {
      * @return string mp3 bytes
      */
     private function synthesize_chunk(string $text, array $options): string {
-        $token = $this->get_access_token();
+        $token = access_token::for_tts();
         $voice = $options['voice'] ?? get_config('local_learningprism', 'gcpvoice') ?: 'en-US-Neural2-A';
         $language = $options['language'] ?? get_config('local_learningprism', 'gcplanguage') ?: 'en-US';
 
@@ -85,55 +87,6 @@ class google_provider implements tts_provider_interface {
             throw new \moodle_exception('error:conversionfailed', 'local_learningprism');
         }
         return $decoded;
-    }
-
-    /**
-     * Obtain OAuth2 access token from service account JSON.
-     *
-     * @return string
-     */
-    private function get_access_token(): string {
-        $json = get_config('local_learningprism', 'gcpcredentials');
-        $creds = json_decode($json, true);
-        if (empty($creds['client_email']) || empty($creds['private_key'])) {
-            throw new \moodle_exception('error:ttsnotconfigured', 'local_learningprism');
-        }
-
-        $now = time();
-        $header = self::b64url(json_encode(['alg' => 'RS256', 'typ' => 'JWT']));
-        $claim = self::b64url(json_encode([
-            'iss' => $creds['client_email'],
-            'scope' => 'https://www.googleapis.com/auth/cloud-platform',
-            'aud' => 'https://oauth2.googleapis.com/token',
-            'iat' => $now,
-            'exp' => $now + 3600,
-        ]));
-        $unsigned = $header . '.' . $claim;
-        $signature = '';
-        $ok = openssl_sign($unsigned, $signature, $creds['private_key'], 'SHA256');
-        if (!$ok) {
-            throw new \moodle_exception('error:ttsnotconfigured', 'local_learningprism');
-        }
-        $jwt = $unsigned . '.' . self::b64url($signature);
-
-        $curl = new \curl();
-        $response = $curl->post('https://oauth2.googleapis.com/token', [
-            'grant_type' => 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-            'assertion' => $jwt,
-        ]);
-        $data = json_decode($response, true);
-        if (empty($data['access_token'])) {
-            throw new \moodle_exception('error:ttsnotconfigured', 'local_learningprism');
-        }
-        return $data['access_token'];
-    }
-
-    /**
-     * @param string $data
-     * @return string
-     */
-    private static function b64url(string $data): string {
-        return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
     }
 
     /**

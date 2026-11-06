@@ -54,6 +54,8 @@ class epub_converter implements converter_interface {
      * @return string
      */
     public function build_epub(string $html, string $title, array $options = []): string {
+        // Many ebook apps struggle with SVG; prefer PNG for wider reader support.
+        $html = image_helper::rasterise_svg_data_uris($html);
         $lang = $this->html_lang($html);
         $packaged = $this->package_html($html);
         $uid = 'urn:uuid:' . $this->uuid();
@@ -124,7 +126,13 @@ class epub_converter implements converter_interface {
                 continue;
             }
             $ext = strtolower($m[1]);
-            $ext = ($ext === 'jpeg') ? 'jpg' : preg_replace('/[^a-z0-9]/', '', $ext);
+            if ($ext === 'jpeg') {
+                $ext = 'jpg';
+            } else if ($ext === 'svg+xml') {
+                $ext = 'svg';
+            } else {
+                $ext = preg_replace('/[^a-z0-9]/', '', $ext) ?? '';
+            }
             if ($ext === '') {
                 $ext = 'png';
             }
@@ -132,11 +140,12 @@ class epub_converter implements converter_interface {
             if ($binary === false) {
                 continue;
             }
+            $mediatype = 'image/' . ($ext === 'jpg' ? 'jpeg' : ($ext === 'svg' ? 'svg+xml' : $ext));
             $href = 'images/img' . $imgindex . '.' . $ext;
             $images[] = [
                 'id' => 'img' . $imgindex,
                 'href' => $href,
-                'media' => 'image/' . ($ext === 'jpg' ? 'jpeg' : $ext),
+                'media' => $mediatype,
                 'data' => $binary,
             ];
             $img->setAttribute('src', $href);

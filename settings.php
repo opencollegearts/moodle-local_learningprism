@@ -198,5 +198,121 @@ if ($hassiteconfig) {
         PARAM_INT
     ));
 
+    $settings->add(new admin_setting_heading(
+        'local_learningprism/notebookheading',
+        get_string('settings:notebookheading', 'local_learningprism'),
+        get_string('settings:notebookheading_desc', 'local_learningprism')
+    ));
+
+    $settings->add(new admin_setting_configcheckbox(
+        'local_learningprism/enablenotebook',
+        get_string('settings:enablenotebook', 'local_learningprism'),
+        get_string('settings:enablenotebook_desc', 'local_learningprism'),
+        0
+    ));
+
+    $settings->add(new admin_setting_configtextarea(
+        'local_learningprism/nbcredentials',
+        get_string('settings:nbcredentials', 'local_learningprism'),
+        get_string('settings:nbcredentials_desc', 'local_learningprism'),
+        '',
+        PARAM_RAW
+    ));
+
+    $settings->add(new admin_setting_configtext(
+        'local_learningprism/nbprojectnumber',
+        get_string('settings:nbprojectnumber', 'local_learningprism'),
+        get_string('settings:nbprojectnumber_desc', 'local_learningprism'),
+        '',
+        PARAM_INT
+    ));
+
+    $settings->add(new admin_setting_configselect(
+        'local_learningprism/nblocation',
+        get_string('settings:nblocation', 'local_learningprism'),
+        get_string('settings:nblocation_desc', 'local_learningprism'),
+        'global',
+        [
+            'global' => get_string('settings:nblocation_global', 'local_learningprism'),
+            'us' => get_string('settings:nblocation_us', 'local_learningprism'),
+            'eu' => get_string('settings:nblocation_eu', 'local_learningprism'),
+        ]
+    ));
+
+    $settings->add(new admin_setting_configselect(
+        'local_learningprism/nbidentity',
+        get_string('settings:nbidentity', 'local_learningprism'),
+        get_string('settings:nbidentity_desc', 'local_learningprism'),
+        'google',
+        [
+            'google' => get_string('settings:nbidentity_google', 'local_learningprism'),
+            'thirdparty' => get_string('settings:nbidentity_thirdparty', 'local_learningprism'),
+        ]
+    ));
+
+    $settings->add(new admin_setting_configselect(
+        'local_learningprism/nbsourceformat',
+        get_string('settings:nbsourceformat', 'local_learningprism'),
+        get_string('settings:nbsourceformat_desc', 'local_learningprism'),
+        'docx',
+        [
+            'docx' => get_string('settings:nbsourceformat_docx', 'local_learningprism'),
+            'pdf' => get_string('settings:nbsourceformat_pdf', 'local_learningprism'),
+        ]
+    ));
+
+    $settings->add(new admin_setting_configtext(
+        'local_learningprism/nbmaxbytes',
+        get_string('settings:nbmaxbytes', 'local_learningprism'),
+        get_string('settings:nbmaxbytes_desc', 'local_learningprism'),
+        524288000,
+        PARAM_INT
+    ));
+
+    $settings->add(new admin_setting_heading(
+        'local_learningprism/archiveheading',
+        get_string('settings:archiveheading', 'local_learningprism'),
+        get_string('settings:archiveheading_desc', 'local_learningprism')
+    ));
+
+    $settings->add(new admin_setting_configcheckbox(
+        'local_learningprism/enablearchive',
+        get_string('settings:enablearchive', 'local_learningprism'),
+        get_string('settings:enablearchive_desc', 'local_learningprism'),
+        0
+    ));
+
+    $settings->add(new admin_setting_configtextarea(
+        'local_learningprism/archivecredentials',
+        get_string('settings:archivecredentials', 'local_learningprism'),
+        get_string('settings:archivecredentials_desc', 'local_learningprism'),
+        '',
+        PARAM_RAW
+    ));
+
+    $settings->add(new admin_setting_configtext(
+        'local_learningprism/archivedelegateduser',
+        get_string('settings:archivedelegateduser', 'local_learningprism'),
+        get_string('settings:archivedelegateduser_desc', 'local_learningprism'),
+        'extranet@oca.ac.uk',
+        PARAM_EMAIL
+    ));
+
+    $settings->add(new admin_setting_configtext(
+        'local_learningprism/archiveparentfolder',
+        get_string('settings:archiveparentfolder', 'local_learningprism'),
+        get_string('settings:archiveparentfolder_desc', 'local_learningprism'),
+        '',
+        PARAM_ALPHANUMEXT
+    ));
+
+    $settings->add(new admin_setting_configtext(
+        'local_learningprism/archivemaxbytes',
+        get_string('settings:archivemaxbytes', 'local_learningprism'),
+        get_string('settings:archivemaxbytes_desc', 'local_learningprism'),
+        524288000,
+        PARAM_INT
+    ));
+
     $ADMIN->add('localplugins', $settings);
 }

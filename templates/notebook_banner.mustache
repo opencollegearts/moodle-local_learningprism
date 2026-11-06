@@ -1,0 +1,41 @@
+{{!
+    This file is part of Moodle - http://moodle.org/
+
+    Moodle is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Moodle is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+}}
+{{!
+    @template local_learningprism/notebook_banner
+
+    Course-page Google Notebook status and links.
+
+    Example context (json):
+    {
+        "heading": "Google Notebook",
+        "statuslabel": "Uploading sources",
+        "manageurl": "http://localhost/local/learningprism/notebook.php?id=4",
+        "managelabel": "Notebook settings",
+        "url": "https://notebook.cloud.google.com/eu/notebook/abc?project=123",
+        "openlabel": "Open Google Notebook"
+    }
+}}
+<div class="local-learningprism-notebook alert alert-info" role="region" aria-label="{{heading}}">
+    <strong>{{heading}}</strong>
+    {{#statuslabel}}<span class="lp-notebook-status">{{statuslabel}}</span>{{/statuslabel}}
+    {{#manageurl}}
+        <a class="btn btn-secondary btn-sm" href="{{manageurl}}">{{managelabel}}</a>
+    {{/manageurl}}
+    {{#url}}
+        <a class="btn btn-primary btn-sm" href="{{url}}" target="_blank" rel="noopener noreferrer">{{openlabel}}</a>
+    {{/url}}
+</div>

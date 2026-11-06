@@ -80,15 +80,28 @@ class hook_helper {
                 'local/learningprism:request',
                 'local/learningprism:download',
                 'local/learningprism:manage',
+                'local/learningprism:viewnotebook',
             ], $context)) {
                 return '';
             }
 
             // styles.css is auto-loaded by Moodle for local plugins; do not call requires->css().
             $canmanage = has_capability('local/learningprism:manage', $context);
+            $canviewnotebook = has_capability('local/learningprism:viewnotebook', $context);
+            $notebook = \local_learningprism\local\notebook\sync_manager::course_ui(
+                $courseid,
+                $canmanage
+            );
+            if (!$canviewnotebook) {
+                $notebook['url'] = '';
+                if (!$canmanage) {
+                    $notebook['show'] = false;
+                }
+            }
             $PAGE->requires->js_call_amd('local_learningprism/course', 'init', [
                 $courseid,
                 $canmanage,
+                $notebook,
             ]);
             self::$initialised = true;
         } catch (\Throwable $e) {
