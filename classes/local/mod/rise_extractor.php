@@ -36,26 +36,30 @@ class rise_extractor {
     private const LARGE_TYPE_REM = 2.0;
 
     /**
-     * Whether the file looks like a Rise LMS export runtime payload.
+     * Whether the content looks like a Rise LMS export payload.
      *
-     * @param string $js
+     * Supports classic `runtime-data.js` (__jsonp) and newer packages that embed
+     * the course JSON in `scormcontent/index.html` via `__fetchCourse` / deserialize.
+     *
+     * @param string $content
      * @return bool
      */
-    public static function is_runtime_data(string $js): bool {
-        return self::decode($js) !== null;
+    public static function is_runtime_data(string $content): bool {
+        return self::decode($content) !== null;
     }
 
     /**
-     * Decode `__jsonp("runtime-data.js","base64…")` into an array.
+     * Decode a Rise course payload into an array.
      *
-     * @param string $js
+     * @param string $content runtime-data.js or index.html contents
      * @return array|null
      */
-    public static function decode(string $js): ?array {
-        if (!preg_match('/__jsonp\(\s*"[^"]+"\s*,\s*"([A-Za-z0-9+\/=]+)"\s*\)/', $js, $matches)) {
+    public static function decode(string $content): ?array {
+        $b64 = self::extract_payload_base64($content);
+        if ($b64 === null) {
             return null;
         }
-        $json = base64_decode($matches[1], true);
+        $json = base64_decode($b64, true);
         if ($json === false || $json === '') {
             return null;
         }
@@ -64,6 +68,56 @@ class rise_extractor {
             return null;
         }
         return $data;
+    }
+
+    /**
+     * Pull the base64 course blob from classic or embedded Rise exports.
+     *
+     * @param string $content
+     * @return string|null
+     */
+    private static function extract_payload_base64(string $content): ?string {
+        if ($content === '') {
+            return null;
+        }
+        // Classic LMS zip: __jsonp("runtime-data.js","base64…")
+        if (preg_match('/__jsonp\(\s*"[^"]+"\s*,\s*"([A-Za-z0-9+\/=]+)"\s*\)/', $content, $matches)) {
+            return $matches[1];
+        }
+        // Locale-split Rise: locales/en.js → __resolveJsonp("course:en","base64…")
+        if (preg_match(
+            '/__resolveJsonp\(\s*"course:[^"]*"\s*,\s*"([A-Za-z0-9+\/=]+)"\s*\)/',
+            $content,
+            $matches
+        )) {
+            return $matches[1];
+        }
+        // Single-file Rise SCORM: __fetchCourse() { return Promise.resolve(deserialize("base64…")) }
+        if (preg_match(
+            '/function\s+__fetchCourse\s*\(\s*\)\s*\{[\s\S]*?deserialize\(\s*"([A-Za-z0-9+\/=]+)"\s*\)/',
+            $content,
+            $matches
+        )) {
+            return $matches[1];
+        }
+        // Fallback: longest deserialize("…") blob that decodes to a course object.
+        if (!preg_match_all('/deserialize\(\s*"([A-Za-z0-9+\/=]{64,})"\s*\)/', $content, $all) || empty($all[1])) {
+            return null;
+        }
+        usort($all[1], static function (string $a, string $b): int {
+            return strlen($b) <=> strlen($a);
+        });
+        foreach ($all[1] as $candidate) {
+            $json = base64_decode($candidate, true);
+            if ($json === false || $json === '') {
+                continue;
+            }
+            $data = json_decode($json, true);
+            if (is_array($data) && !empty($data['course']) && is_array($data['course'])) {
+                return $candidate;
+            }
+        }
+        return null;
     }
 
     /**

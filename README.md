@@ -393,7 +393,7 @@ Created groups are locked so only **members** (plus owners/managers) can post, v
    - **Google Group (create if missing)** — creates the group if needed, syncs enrolled users into group membership, then shares the folder with the group; **Update sharing** and enrolment changes re-sync membership
    - **Course participants** — viewer access for each enrolled Moodle email; refreshed automatically on enrol/unenrol
    - **Anyone with the link can view** — link-readable folder (may be blocked by Workspace policy)
-4. Click **Generate or refresh archive** (or **Update sharing** only). Cron (or **Sync Learning Prism Google Drive archives → Run now**) converts, uploads, then shares.
+4. Click **Generate or refresh archive** (or **Update sharing** only). Cron (or **Sync Learning Prism Google Drive archives → Run now**) converts, uploads, then shares. On localhost without cron, raise **Google uploads per cron run** (for example 25) so each Run now uploads more files.
 5. When status is **Ready**, staff with `local/learningprism:viewarchive` can open the Drive folder.
 
 ## Capabilities
@@ -436,8 +436,8 @@ Site admins configure credentials under the plugin settings. See those sections 
 
 - **Process Learning Prism conversion jobs** — every minute
 - **Purge stale Learning Prism files** — daily (removes ready files whose content hash no longer matches)
-- **Sync Learning Prism Google Notebooks** — every minute (one source upload per run when a course notebook is queued)
-- **Sync Learning Prism Google Drive archives** — every minute (one file upload per run when a course archive is queued)
+- **Sync Learning Prism Google Notebooks** — every minute (uploads per run set by **Google uploads per cron run**)
+- **Sync Learning Prism Google Drive archives** — every minute (same **Google uploads per cron run** setting; default 1)
 
 ## Development
 

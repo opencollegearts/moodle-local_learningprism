@@ -38,6 +38,68 @@ class rise_extractor_test extends \advanced_testcase {
     }
 
     /**
+     * Locale-split Rise packages store the course in locales/en.js via __resolveJsonp.
+     */
+    public function test_decode_locale_resolve_jsonp_payload(): void {
+        $course = [
+            'course' => [
+                'title' => 'Locale Rise',
+                'lessons' => [[
+                    'title' => 'Lesson B',
+                    'items' => [[
+                        'type' => 'text',
+                        'variant' => 'paragraph',
+                        'items' => [['paragraph' => '<p>From locales/en.js.</p>']],
+                    ]],
+                ]],
+            ],
+        ];
+        $js = '__resolveJsonp("course:en","' . base64_encode(json_encode($course)) . '")';
+        $this->assertTrue(rise_extractor::is_runtime_data($js));
+        $data = rise_extractor::decode($js);
+        $this->assertNotNull($data);
+        $this->assertSame('Locale Rise', $data['course']['title']);
+        $htmlout = rise_extractor::to_html($data, static function (): string {
+            return '';
+        });
+        $this->assertStringContainsString('<h2>Lesson B</h2>', $htmlout);
+        $this->assertStringContainsString('From locales/en.js.', $htmlout);
+    }
+
+    /**
+     * Newer Rise SCORM packages embed the course in index.html via deserialize().
+     */
+    public function test_decode_embedded_index_html_payload(): void {
+        $course = [
+            'course' => [
+                'title' => 'Embedded Rise',
+                'lessons' => [[
+                    'title' => 'Lesson A',
+                    'items' => [[
+                        'type' => 'text',
+                        'variant' => 'paragraph',
+                        'items' => [['paragraph' => '<p>Hello from embedded Rise.</p>']],
+                    ]],
+                ]],
+            ],
+        ];
+        $b64 = base64_encode(json_encode($course));
+        $html = '<!DOCTYPE html><html><body><script>'
+            . 'function deserialize(str) { return JSON.parse(atob(str)); }'
+            . 'function __fetchCourse() { return Promise.resolve(deserialize("' . $b64 . '")); }'
+            . '</script></body></html>';
+        $this->assertTrue(rise_extractor::is_runtime_data($html));
+        $data = rise_extractor::decode($html);
+        $this->assertNotNull($data);
+        $this->assertSame('Embedded Rise', $data['course']['title']);
+        $htmlout = rise_extractor::to_html($data, static function (): string {
+            return '';
+        });
+        $this->assertStringContainsString('<h2>Lesson A</h2>', $htmlout);
+        $this->assertStringContainsString('Hello from embedded Rise.', $htmlout);
+    }
+
+    /**
      * Tests to html linearises rise blocks.
      */
     public function test_to_html_linearises_rise_blocks(): void {

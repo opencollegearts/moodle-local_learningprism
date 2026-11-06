@@ -33,17 +33,17 @@ class mod_scorm extends activity_module {
     private $fileindex = null;
 
     /**
-     * Hash the Rise runtime payload so course-page listing does not inline images.
+     * Hash the Rise course payload so course-page listing does not inline images.
      *
      * @return string
      * @throws moodle_exception
      */
     public function get_content_hash(): string {
-        $runtime = $this->find_runtime_file();
-        if (!$runtime) {
+        $payload = $this->find_course_payload_file();
+        if (!$payload) {
             throw new moodle_exception('error:scormnotrise', 'local_learningprism');
         }
-        return $runtime->get_contenthash();
+        return $payload->get_contenthash();
     }
 
     /**
@@ -51,11 +51,11 @@ class mod_scorm extends activity_module {
      * @throws moodle_exception
      */
     protected function get_body_html(): string {
-        $runtime = $this->find_runtime_file();
-        if (!$runtime) {
+        $payload = $this->find_course_payload_file();
+        if (!$payload) {
             throw new moodle_exception('error:scormnotrise', 'local_learningprism');
         }
-        $data = rise_extractor::decode($runtime->get_content());
+        $data = rise_extractor::decode($payload->get_content());
         if ($data === null) {
             throw new moodle_exception('error:scormnotrise', 'local_learningprism');
         }
@@ -80,21 +80,57 @@ class mod_scorm extends activity_module {
     }
 
     /**
+     * Locate Rise course JSON: classic runtime-data.js or newer embedded index.html.
+     *
      * @return stored_file|null
      */
-    private function find_runtime_file(): ?stored_file {
+    private function find_course_payload_file(): ?stored_file {
         $fs = get_file_storage();
         foreach ([
             ['/scormcontent/', 'runtime-data.js'],
             ['/', 'runtime-data.js'],
         ] as $try) {
             $file = $fs->get_file($this->context->id, 'mod_scorm', 'content', 0, $try[0], $try[1]);
-            if ($file && !$file->is_directory()) {
+            if ($file && !$file->is_directory() && rise_extractor::is_runtime_data($file->get_content())) {
                 return $file;
             }
         }
         foreach ($this->file_index() as $file) {
-            if ($file->get_filename() === 'runtime-data.js') {
+            if ($file->get_filename() === 'runtime-data.js'
+                    && rise_extractor::is_runtime_data($file->get_content())) {
+                return $file;
+            }
+        }
+        // Newer Rise LMS zips omit runtime-data.js and embed the course in index.html.
+        foreach ([
+            ['/scormcontent/', 'index.html'],
+            ['/', 'index.html'],
+        ] as $try) {
+            $file = $fs->get_file($this->context->id, 'mod_scorm', 'content', 0, $try[0], $try[1]);
+            if ($file && !$file->is_directory() && rise_extractor::is_runtime_data($file->get_content())) {
+                return $file;
+            }
+        }
+        // Locale-split Rise: course JSON lives in locales/en.js (etc.).
+        foreach ([
+            ['/scormcontent/locales/', 'en.js'],
+            ['/locales/', 'en.js'],
+        ] as $try) {
+            $file = $fs->get_file($this->context->id, 'mod_scorm', 'content', 0, $try[0], $try[1]);
+            if ($file && !$file->is_directory() && rise_extractor::is_runtime_data($file->get_content())) {
+                return $file;
+            }
+        }
+        foreach ($this->file_index() as $file) {
+            $filepath = $file->get_filepath();
+            $filename = $file->get_filename();
+            $isindex = strcasecmp($filename, 'index.html') === 0;
+            $islocale = (bool) preg_match('#/locales/#i', $filepath)
+                && (bool) preg_match('/\.js$/i', $filename);
+            if (!$isindex && !$islocale) {
+                continue;
+            }
+            if (rise_extractor::is_runtime_data($file->get_content())) {
                 return $file;
             }
         }

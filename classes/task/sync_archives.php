@@ -22,7 +22,7 @@ use local_learningprism\local\archive\sync_manager;
 defined('MOODLE_INTERNAL') || die();
 
 /**
- * Sync course Google Drive archives (one upload per run).
+ * Sync course Google Drive archives (googleuploadsperrun uploads per run).
  *
  * @package    local_learningprism
  * @copyright  2026 Open College of the Arts

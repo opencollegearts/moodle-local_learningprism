@@ -136,6 +136,19 @@ class settings {
     }
 
     /**
+     * How many Notebook sources to upload in one scheduled-task run.
+     *
+     * @return int
+     */
+    public static function uploads_per_run(): int {
+        $value = (int) get_config('local_learningprism', 'googleuploadsperrun');
+        if ($value <= 0) {
+            $value = 1;
+        }
+        return min(50, $value);
+    }
+
+    /**
      * Public notebook URL for a notebook id.
      *
      * @param string $notebookid

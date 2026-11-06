@@ -135,7 +135,7 @@ class sync_manager {
     }
 
     /**
-     * Process one notebook step (one source upload when uploading).
+     * Process one notebook step (up to googleuploadsperrun uploads when uploading).
      *
      * @return int 1 if work was done
      */
@@ -166,7 +166,7 @@ class sync_manager {
         }
         $record = reset($records);
         try {
-            self::process_record($record);
+            self::process_record($record, settings::uploads_per_run());
         } catch (\Throwable $e) {
             $detail = $e->getMessage();
             if ($e instanceof \moodle_exception && !empty($e->debuginfo)) {
@@ -246,15 +246,22 @@ class sync_manager {
 
     /**
      * @param \stdClass $record
+     * @param int $uploadlimit Max Notebook source uploads in this run while status is uploading
      */
-    private static function process_record(\stdClass $record): void {
+    private static function process_record(\stdClass $record, int $uploadlimit = 1): void {
+        $uploadlimit = max(1, min(50, $uploadlimit));
         if ($record->status === self::STATUS_QUEUED || $record->status === self::STATUS_CONVERTING) {
             self::ensure_conversions($record);
             $record = self::get_record((int) $record->courseid) ?? $record;
         }
         if ($record->status === self::STATUS_UPLOADING) {
-            self::upload_next($record);
-            $record = self::get_record((int) $record->courseid) ?? $record;
+            for ($i = 0; $i < $uploadlimit; $i++) {
+                self::upload_next($record);
+                $record = self::get_record((int) $record->courseid) ?? $record;
+                if ($record->status !== self::STATUS_UPLOADING) {
+                    break;
+                }
+            }
             if ($record->status === self::STATUS_UPLOADING) {
                 return;
             }

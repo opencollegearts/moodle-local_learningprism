@@ -107,6 +107,19 @@ class settings {
     }
 
     /**
+     * How many Drive files to upload in one scheduled-task run.
+     *
+     * @return int
+     */
+    public static function uploads_per_run(): int {
+        $value = (int) get_config('local_learningprism', 'googleuploadsperrun');
+        if ($value <= 0) {
+            $value = 1;
+        }
+        return min(50, $value);
+    }
+
+    /**
      * Root folder display name for a course.
      *
      * @param \stdClass $course

@@ -191,6 +191,14 @@ if ($hassiteconfig) {
     ));
 
     $settings->add(new admin_setting_configtext(
+        'local_learningprism/googleuploadsperrun',
+        get_string('settings:googleuploadsperrun', 'local_learningprism'),
+        get_string('settings:googleuploadsperrun_desc', 'local_learningprism'),
+        1,
+        PARAM_INT
+    ));
+
+    $settings->add(new admin_setting_configtext(
         'local_learningprism/staledays',
         get_string('settings:staledays', 'local_learningprism'),
         get_string('settings:staledays_desc', 'local_learningprism'),

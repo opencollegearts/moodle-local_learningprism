@@ -25,8 +25,8 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'local_learningprism';
-$plugin->version   = 2026110500;
+$plugin->version   = 2026110602;
 $plugin->requires  = 2022112800; // Moodle 4.3+.
-$plugin->release   = '1.3.6';
+$plugin->release   = '1.3.9';
 $plugin->maturity  = MATURITY_STABLE;
 $plugin->supported = [403, 405];

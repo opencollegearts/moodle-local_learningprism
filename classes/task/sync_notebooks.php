@@ -22,7 +22,7 @@ use local_learningprism\local\notebook\sync_manager;
 defined('MOODLE_INTERNAL') || die();
 
 /**
- * Sync course Google Notebook sources (one upload per run).
+ * Sync course Google Notebook sources (googleuploadsperrun uploads per run).
  *
  * @package    local_learningprism
  * @copyright  2026 Open College of the Arts
