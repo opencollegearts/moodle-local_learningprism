@@ -28,7 +28,7 @@ You can install the plugin, enable it on a course, and generate Word/EPUB immedi
 
 ## Requirements
 
-- Moodle **4.3 or later** (tested on 4.5)
+- Moodle **4.3–5.2** (supported range in `version.php`)
 - PHP with **cURL** and **ZipArchive** (`zip` extension)
 - Moodle **cron** running, or a way to run scheduled tasks by hand (conversions do not finish in the browser)
 - For PDF: [Docker](https://docs.docker.com/get-docker/) on the Moodle host or on a machine Moodle can reach
@@ -186,7 +186,7 @@ Failed PDF rows on the course **Learning Prism report** can be retried with **Re
 | Print background colour | Default page colour for PDF, EPUB, and Word (light presets) |
 | TTS provider | `google` or `elevenlabs` |
 | Google credentials JSON | Service account key for Cloud TTS |
-| ElevenLabs API key + voice ID | ElevenLabs TTS |
+| ElevenLabs API key + voices list | ElevenLabs TTS (`voice_id|Display name` lines) |
 | PDF engine | `gotenberg`, `weasyprint`, `libreoffice`, or `none` |
 | PDF engine URL | Gotenberg/WeasyPrint base URL, e.g. `http://127.0.0.1:3000` |
 | LibreOffice path | e.g. `/usr/bin/soffice` |
@@ -287,10 +287,12 @@ The plugin needs `client_email` and `private_key` from this file. If either is m
 3. Set **TTS provider** to **Google Cloud Text-to-Speech**.
 4. Paste the **entire JSON file contents** into **Google Cloud credentials JSON** (not a file path).
 5. Set **Google Cloud language code** (BCP-47), e.g. `en-US`.
-6. Set **Google Cloud default voice** to a voice that matches that language, e.g. `en-US-Neural2-A`.
+6. In **Google Cloud voices**, list one voice per line as `voice_id|Display name`, then save and choose **Google Cloud site default voice**.
 7. Save.
 
-Voice names must match Google’s catalogue and the language code. Browse voices in the [Cloud TTS voice list](https://cloud.google.com/text-to-speech/docs/voices). Neural2 / Studio voices sound better than Standard; they also cost more.
+Voice IDs must match Google’s catalogue and the language code. Browse voices in the [Cloud TTS voice list](https://cloud.google.com/text-to-speech/docs/voices). Neural2 / Studio voices sound better than Standard; they also cost more.
+
+Per course you can set a **course default voice** (overrides the site default for shared audio) and optionally **Allow students to request audio**. When that is on, students get a voice picker for a private audio copy; shared/pre-generated audio still uses the course or site default.
 
 Useful starting pairs:
 
@@ -316,8 +318,8 @@ Treat the JSON as a secret. If it leaks, delete that key in GCP (**Keys → Dele
 ### ElevenLabs
 
 1. In the [ElevenLabs dashboard](https://elevenlabs.io/app/settings/api-keys), create an API key. Copy the **secret key** — it must start with `sk_`. Do not paste the key *ID*.
-2. Open **Voices**, pick a voice, and copy its **Voice ID**.
-3. In Moodle, set **TTS provider** to **ElevenLabs**, paste the `sk_…` key and Voice ID, enable **TTS audio format**, and save.
+2. Open **Voices**, pick voices, and copy each **Voice ID**.
+3. In Moodle, set **TTS provider** to **ElevenLabs**, paste the `sk_…` key, list voices as `voice_id|Display name` under **ElevenLabs voices**, choose the site default, enable **TTS audio format**, and save.
 
 ## Google Notebook (optional, v1.2)
 
@@ -355,7 +357,7 @@ Uploads are incremental (content hash). Removed activities/files are dropped fro
 
 ## Google Drive archive (optional, v1.3)
 
-Teachers can generate an **indexed course archive** in Google Drive. Each Moodle section becomes a numbered folder (`01_Week 1`). Inside it, documents are numbered (`01_Section overview.docx`, `02_Activity.docx`). Content includes section descriptions, Assignments (title, description, activity instructions), Forums (title, description), Book/Page/Label/Rise as DOCX, and native PDF/DOCX File/Folder resources. Audio and video are skipped.
+Teachers can generate an **indexed course archive** in Google Drive. Each Moodle section becomes a numbered folder (`01_Week 1`). Inside it, each enabled archive format has its own subfolder (`DocX`, `PDF`, `Ebook`, `Audio`). Documents are numbered (`01_Section overview.docx`, …). Content includes section descriptions, Assignments, Forums, Book/Page/Label/Rise (converted for every selected format), and native PDF/DOCX File/Folder resources placed in the matching format folder. By default only **DocX** is selected under **Archive formats**.
 
 Refresh **deletes and recreates** the course folder, then re-applies sharing.
 
@@ -428,7 +430,7 @@ Site admins configure credentials under the plugin settings. See those sections 
 - DOCX maps headings to Word **Heading 1–6** (outline levels, bold sizes) for navigation pane / AT, and embeds raster images from the HTML.
 - EPUB 3 includes a `nav` document from those headings so ebook readers can offer a table of contents.
 - PDF quality depends on the engine: WeasyPrint/LibreOffice generally preserve structure better for assistive tech than raw Chromium print; Gotenberg is convenient for fidelity. Full PDF/UA certification is out of scope for v1 — validate outputs with your institution’s checker.
-- TTS sends plain text derived from the HTML (headings become pauses). Content may leave your site to Google or ElevenLabs.
+- TTS speaks a labelled script (`Title:` then `Content:`), skips Page/Book description (`#intro`), and does not repeat the activity heading. Content may leave your site to Google or ElevenLabs.
 - Articulate Rise SCORM is linearised (lessons as `h2`, interactive blocks as headings plus text) so print and TTS are usable; click-to-reveal behaviour is not preserved.
 - Learners can request a private Word/PDF/EPUB with their own background colour and font; those files are not shared with other users.
 

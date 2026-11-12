@@ -250,5 +250,64 @@ function xmldb_local_learningprism_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026110304, 'local', 'learningprism');
     }
 
+    if ($oldversion < 2026111211) {
+        // Course audio / voice settings.
+        $table = new xmldb_table('local_learningprism_course');
+        $field = new xmldb_field('allowstudentaudio', XMLDB_TYPE_INTEGER, '1', null, XMLDB_NOTNULL, null, '0', 'enabled');
+        if ($dbman->table_exists($table) && !$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+        $field = new xmldb_field('defaultvoice', XMLDB_TYPE_CHAR, '128', null, XMLDB_NOTNULL, null, null, 'allowstudentaudio');
+        if ($dbman->table_exists($table) && !$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+            $DB->execute("UPDATE {local_learningprism_course} SET defaultvoice = '' WHERE defaultvoice IS NULL");
+        }
+
+        // Archive item format + format folder.
+        $table = new xmldb_table('local_learningprism_archiveitem');
+        $field = new xmldb_field('format', XMLDB_TYPE_CHAR, '20', null, XMLDB_NOTNULL, null, 'docx', 'fileid');
+        if ($dbman->table_exists($table) && !$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+        $field = new xmldb_field('formatfolder', XMLDB_TYPE_CHAR, '64', null, XMLDB_NOTNULL, null, null, 'sectionfolder');
+        if ($dbman->table_exists($table) && !$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+            $DB->execute("UPDATE {local_learningprism_archiveitem} SET formatfolder = 'DocX' WHERE formatfolder IS NULL OR formatfolder = ''");
+        }
+        $oldindex = new xmldb_index('itemkeyidx', XMLDB_INDEX_UNIQUE, ['archiveid', 'sourcetype', 'sectionnum', 'cmid', 'fileid']);
+        if ($dbman->table_exists($table) && $dbman->index_exists($table, $oldindex)) {
+            $dbman->drop_index($table, $oldindex);
+        }
+        $newindex = new xmldb_index('itemkeyidx', XMLDB_INDEX_UNIQUE, [
+            'archiveid', 'sourcetype', 'sectionnum', 'cmid', 'fileid', 'format',
+        ]);
+        if ($dbman->table_exists($table) && !$dbman->index_exists($table, $newindex)) {
+            $dbman->add_index($table, $newindex);
+        }
+
+        // Migrate legacy single-voice settings into catalogs.
+        $gcpvoice = trim((string) get_config('local_learningprism', 'gcpvoice'));
+        if ($gcpvoice === '') {
+            $gcpvoice = 'en-US-Neural2-A';
+        }
+        if (get_config('local_learningprism', 'gcpvoices') === false || get_config('local_learningprism', 'gcpvoices') === '') {
+            set_config('gcpvoices', $gcpvoice . '|' . $gcpvoice, 'local_learningprism');
+        }
+        if (get_config('local_learningprism', 'gcpvoicedefault') === false || get_config('local_learningprism', 'gcpvoicedefault') === '') {
+            set_config('gcpvoicedefault', $gcpvoice, 'local_learningprism');
+        }
+        $elvoice = trim((string) get_config('local_learningprism', 'elevenlabsvoice'));
+        if ($elvoice !== '' && (get_config('local_learningprism', 'elevenlabsvoices') === false
+                || get_config('local_learningprism', 'elevenlabsvoices') === '')) {
+            set_config('elevenlabsvoices', $elvoice . '|' . $elvoice, 'local_learningprism');
+            set_config('elevenlabsvoicedefault', $elvoice, 'local_learningprism');
+        }
+        if (get_config('local_learningprism', 'archiveformats') === false) {
+            set_config('archiveformats', 'docx', 'local_learningprism');
+        }
+
+        upgrade_plugin_savepoint(true, 2026111211, 'local', 'learningprism');
+    }
+
     return true;
 }

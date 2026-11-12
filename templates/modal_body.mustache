@@ -79,6 +79,16 @@
                     {{/fonts}}
                 </select>
             </div>
+            {{#showvoice}}
+                <div class="form-group">
+                    <label for="lpvoice">{{#str}} modal:voice, local_learningprism {{/str}}</label>
+                    <select id="lpvoice" name="lpvoice" class="custom-select">
+                        {{#voices}}
+                            <option value="{{key}}" {{#selected}}selected{{/selected}}>{{label}}</option>
+                        {{/voices}}
+                    </select>
+                </div>
+            {{/showvoice}}
             <button type="button" class="btn btn-outline-primary" data-action="lp-request-personal">
                 {{#str}} modal:requestmine, local_learningprism {{/str}}
             </button>

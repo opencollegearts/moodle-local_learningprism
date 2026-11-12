@@ -97,7 +97,7 @@ if ($hassiteconfig) {
         ]
     ));
 
-    $settings->add(new admin_setting_configtextarea(
+    $settings->add(new \local_learningprism\admin\setting_configsecrettextarea(
         'local_learningprism/gcpcredentials',
         get_string('settings:gcpcredentials', 'local_learningprism'),
         get_string('settings:gcpcredentials_desc', 'local_learningprism'),
@@ -105,12 +105,24 @@ if ($hassiteconfig) {
         PARAM_RAW
     ));
 
-    $settings->add(new admin_setting_configtext(
-        'local_learningprism/gcpvoice',
-        get_string('settings:gcpvoice', 'local_learningprism'),
-        get_string('settings:gcpvoice_desc', 'local_learningprism'),
-        'en-US-Neural2-A',
-        PARAM_TEXT
+    $settings->add(new admin_setting_configtextarea(
+        'local_learningprism/gcpvoices',
+        get_string('settings:gcpvoices', 'local_learningprism'),
+        get_string('settings:gcpvoices_desc', 'local_learningprism'),
+        \local_learningprism\local\tts\voice_catalog::default_google_list(),
+        PARAM_RAW
+    ));
+
+    $gcpvoiceoptions = \local_learningprism\local\tts\voice_catalog::options_for_provider('google');
+    if (!$gcpvoiceoptions) {
+        $gcpvoiceoptions = ['en-US-Neural2-A' => 'en-US-Neural2-A'];
+    }
+    $settings->add(new admin_setting_configselect(
+        'local_learningprism/gcpvoicedefault',
+        get_string('settings:gcpvoicedefault', 'local_learningprism'),
+        get_string('settings:gcpvoicedefault_desc', 'local_learningprism'),
+        array_key_first($gcpvoiceoptions),
+        $gcpvoiceoptions
     ));
 
     $settings->add(new admin_setting_configtext(
@@ -121,22 +133,31 @@ if ($hassiteconfig) {
         PARAM_TEXT
     ));
 
-    // Plain text field: passwordunmask uses href="#" edit controls that jump to top of page
-    // when the value is empty / JS init fails on long admin pages (esp. Snap/Open LMS).
-    $settings->add(new admin_setting_configtext(
+    $settings->add(new admin_setting_configpasswordunmask(
         'local_learningprism/elevenlabskey',
         get_string('settings:elevenlabskey', 'local_learningprism'),
         get_string('settings:elevenlabskey_desc', 'local_learningprism'),
+        ''
+    ));
+
+    $settings->add(new admin_setting_configtextarea(
+        'local_learningprism/elevenlabsvoices',
+        get_string('settings:elevenlabsvoices', 'local_learningprism'),
+        get_string('settings:elevenlabsvoices_desc', 'local_learningprism'),
         '',
         PARAM_RAW
     ));
 
-    $settings->add(new admin_setting_configtext(
-        'local_learningprism/elevenlabsvoice',
-        get_string('settings:elevenlabsvoice', 'local_learningprism'),
-        get_string('settings:elevenlabsvoice_desc', 'local_learningprism'),
-        '',
-        PARAM_TEXT
+    $elvoiceoptions = \local_learningprism\local\tts\voice_catalog::options_for_provider('elevenlabs');
+    if (!$elvoiceoptions) {
+        $elvoiceoptions = ['' => get_string('settings:voicenone', 'local_learningprism')];
+    }
+    $settings->add(new admin_setting_configselect(
+        'local_learningprism/elevenlabsvoicedefault',
+        get_string('settings:elevenlabsvoicedefault', 'local_learningprism'),
+        get_string('settings:elevenlabsvoicedefault_desc', 'local_learningprism'),
+        array_key_first($elvoiceoptions),
+        $elvoiceoptions
     ));
 
     $settings->add(new admin_setting_heading(
@@ -219,7 +240,7 @@ if ($hassiteconfig) {
         0
     ));
 
-    $settings->add(new admin_setting_configtextarea(
+    $settings->add(new \local_learningprism\admin\setting_configsecrettextarea(
         'local_learningprism/nbcredentials',
         get_string('settings:nbcredentials', 'local_learningprism'),
         get_string('settings:nbcredentials_desc', 'local_learningprism'),
@@ -290,7 +311,20 @@ if ($hassiteconfig) {
         0
     ));
 
-    $settings->add(new admin_setting_configtextarea(
+    $settings->add(new admin_setting_configmulticheckbox(
+        'local_learningprism/archiveformats',
+        get_string('settings:archiveformats', 'local_learningprism'),
+        get_string('settings:archiveformats_desc', 'local_learningprism'),
+        ['docx' => 1],
+        [
+            'docx' => get_string('settings:archiveformat_docx', 'local_learningprism'),
+            'pdf' => get_string('settings:archiveformat_pdf', 'local_learningprism'),
+            'epub' => get_string('settings:archiveformat_epub', 'local_learningprism'),
+            'audio' => get_string('settings:archiveformat_audio', 'local_learningprism'),
+        ]
+    ));
+
+    $settings->add(new \local_learningprism\admin\setting_configsecrettextarea(
         'local_learningprism/archivecredentials',
         get_string('settings:archivecredentials', 'local_learningprism'),
         get_string('settings:archivecredentials_desc', 'local_learningprism'),

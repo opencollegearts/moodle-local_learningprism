@@ -18,6 +18,7 @@ namespace local_learningprism;
 
 use local_learningprism\local\converter\converter_factory;
 use local_learningprism\local\mod\module_factory;
+use local_learningprism\local\tts\voice_catalog;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -110,12 +111,17 @@ class job_manager {
         $module = module_factory::instance_from_cmid($cmid);
         $hash = $module->get_content_hash();
         $courseid = $module->get_courseid();
-        $enabled = manager::enabled_formats();
+        $enabled = $ignoreenabled
+            ? manager::enabled_formats()
+            : manager::enabled_formats_for_user($courseid, $userid);
         $now = time();
         $jobs = [];
 
         if ($personal) {
             $printoptions = html_normalizer::save_user_print_options($userid, $printoptions);
+            if (!empty($printoptions['voice'])) {
+                $printoptions['voice'] = voice_catalog::resolve($courseid, $printoptions['voice']);
+            }
         } else {
             $printoptions = [];
         }
@@ -157,7 +163,7 @@ class job_manager {
                     continue;
                 }
             }
-            if ($personal && !manager::is_print_format($format)) {
+            if ($personal && !manager::supports_personal($format, $courseid)) {
                 continue;
             }
 
@@ -172,8 +178,11 @@ class job_manager {
             }
 
             $provider = null;
+            $joboptions = $personal ? $printoptions : [];
             if ($format === manager::FORMAT_AUDIO) {
                 $provider = get_config('local_learningprism', 'ttsprovider') ?: 'google';
+                $requestedvoice = $personal ? ($printoptions['voice'] ?? '') : '';
+                $joboptions['voice'] = voice_catalog::resolve($courseid, $requestedvoice !== '' ? $requestedvoice : null);
             } else if ($format === manager::FORMAT_PDF) {
                 $provider = get_config('local_learningprism', 'pdfengine') ?: 'none';
             } else if ($format === manager::FORMAT_DOCX) {
@@ -190,7 +199,7 @@ class job_manager {
                 'provider' => $provider,
                 'status' => manager::STATUS_QUEUED,
                 'fileid' => null,
-                'options' => json_encode($printoptions),
+                'options' => json_encode($joboptions),
                 'errorinfo' => null,
                 'userid' => $userid,
                 'personal' => $personal ? 1 : 0,
@@ -212,8 +221,8 @@ class job_manager {
                     self::process_job($job);
                     $processedids[] = (int) $job->id;
                 } catch (\Throwable $e) {
-                    // Leave queued for cron. Avoid debugging() — Whoops promotes it to fatal.
-                    error_log('local_learningprism queue local: ' . $e->getMessage());
+                    // Leave queued for cron; surface for developers only.
+                    debugging('local_learningprism queue local: ' . $e->getMessage(), DEBUG_DEVELOPER);
                 }
             }
         }
@@ -267,7 +276,7 @@ class job_manager {
             $job->contenthash = $module->get_content_hash();
             $job->courseid = $module->get_courseid();
         } catch (\Throwable $e) {
-            error_log('local_learningprism requeue: ' . $e->getMessage());
+            debugging('local_learningprism requeue: ' . $e->getMessage(), DEBUG_DEVELOPER);
         }
 
         $job->status = manager::STATUS_QUEUED;
@@ -307,9 +316,15 @@ class job_manager {
             }
 
             $options = json_decode($job->options ?? '{}', true) ?: [];
-            if (!empty($job->personal)) {
+            if (!empty($job->personal) && manager::is_print_format($job->format)) {
                 $options = html_normalizer::normalise_print_options($options);
                 $html = html_normalizer::apply_print_style($html, $options);
+            }
+            if ($job->format === manager::FORMAT_AUDIO) {
+                $options['voice'] = voice_catalog::resolve(
+                    (int) $job->courseid,
+                    $options['voice'] ?? null
+                );
             }
 
             $converter = converter_factory::for_format($job->format);
@@ -322,11 +337,20 @@ class job_manager {
             $DB->update_record('local_learningprism_job', $job);
         } catch (\Throwable $e) {
             $job = self::get_job((int) $job->id) ?? $job;
-            $errormessage = get_string('error:conversionfailed', 'local_learningprism');
-            if ($e instanceof \moodle_exception && $e->errorcode !== 'error:conversionfailed') {
-                $errormessage = $e->getMessage();
+            // Prefer the exception message (includes engine detail for PDF/TTS failures).
+            $errormessage = $e->getMessage();
+            if ($e instanceof \moodle_exception && !empty($e->debuginfo)
+                    && (str_contains($errormessage, '{$a}') || $errormessage === ''
+                        || $errormessage === 'error/error:conversionfailed')) {
+                $errormessage = get_string('error:conversionfailed', 'local_learningprism', $e->debuginfo);
+            } else if ($errormessage === '' || $errormessage === 'error/error:conversionfailed'
+                    || str_contains($errormessage, '{$a}')) {
+                $detail = ($e instanceof \moodle_exception && !empty($e->debuginfo))
+                    ? $e->debuginfo
+                    : 'unknown error';
+                $errormessage = get_string('error:conversionfailed', 'local_learningprism', $detail);
             }
-            error_log('local_learningprism process_job ' . (int) $job->id . ': ' . $e->getMessage());
+            debugging('local_learningprism process_job ' . (int) $job->id . ': ' . $errormessage, DEBUG_DEVELOPER);
             $job->status = manager::STATUS_ERROR;
             $job->errorinfo = $errormessage;
             $job->timemodified = time();
@@ -334,17 +358,16 @@ class job_manager {
             try {
                 notifier::notify_failure($job, $errormessage);
             } catch (\Throwable $notifyerror) {
-                error_log('local_learningprism notify: ' . $notifyerror->getMessage());
+                debugging('local_learningprism notify: ' . $notifyerror->getMessage(), DEBUG_DEVELOPER);
             }
             return;
         }
 
-        // Never let messaging failures (e.g. invalid noreply@localhost under Whoops)
-        // overwrite a successful READY status.
+        // Never let messaging failures overwrite a successful READY status.
         try {
             notifier::notify_success($job, $module->get_name());
         } catch (\Throwable $notifyerror) {
-            error_log('local_learningprism notify: ' . $notifyerror->getMessage());
+            debugging('local_learningprism notify: ' . $notifyerror->getMessage(), DEBUG_DEVELOPER);
         }
     }
 
@@ -397,8 +420,14 @@ class job_manager {
 
         $module = module_factory::instance_from_cmid($cmid);
         $hash = $module->get_content_hash();
-        $enabled = manager::enabled_formats();
-        $printoptions = html_normalizer::user_print_options((int) ($USER->id ?? 0));
+        $courseid = $module->get_courseid();
+        $userid = (int) ($USER->id ?? 0);
+        $enabled = manager::enabled_formats_for_user($courseid, $userid);
+        $printoptions = html_normalizer::user_print_options($userid);
+        $coursedefaultvoice = voice_catalog::course_default($courseid);
+        if ($printoptions['voice'] === '') {
+            $printoptions['voice'] = $coursedefaultvoice;
+        }
         $optionshash = html_normalizer::print_options_hash($printoptions);
         $jobs = $DB->get_records('local_learningprism_job', [
             'cmid' => $cmid,
@@ -409,12 +438,13 @@ class job_manager {
         foreach ($jobs as $loaded) {
             if ((int) $loaded->personal === 0) {
                 $sharedjobs[$loaded->format] = $loaded;
-            } else if (!empty($USER->id)
-                    && (int) $loaded->userid === (int) $USER->id
+            } else if ($userid > 0
+                    && (int) $loaded->userid === $userid
                     && $loaded->optionshash === $optionshash) {
                 $personaljobs[$loaded->format] = $loaded;
             }
         }
+        $allowstudentaudio = manager::course_allows_student_audio($courseid);
         $result = [];
         foreach ($enabled as $format) {
             $job = $sharedjobs[$format] ?? null;
@@ -425,7 +455,7 @@ class job_manager {
                 'jobid' => $job ? (int) $job->id : 0,
                 'errorinfo' => $job->errorinfo ?? '',
                 'downloadurl' => '',
-                'supportspersonal' => manager::is_print_format($format),
+                'supportspersonal' => manager::supports_personal($format, $courseid),
                 'personalstatus' => 'none',
                 'personaljobid' => 0,
                 'personalerrorinfo' => '',
@@ -435,7 +465,7 @@ class job_manager {
                 $url = filemanager::get_download_url($job);
                 $item['downloadurl'] = $url ? $url->out(false) : '';
             }
-            if ($item['supportspersonal'] && !empty($USER->id)) {
+            if ($item['supportspersonal'] && $userid > 0) {
                 $pjob = $personaljobs[$format] ?? null;
                 if ($pjob) {
                     $item['personalstatus'] = $pjob->status;
@@ -466,6 +496,14 @@ class job_manager {
                 'selected' => $key === $printoptions['font'],
             ];
         }
+        $voices = [];
+        foreach (voice_catalog::list_for_provider(voice_catalog::active_provider()) as $row) {
+            $voices[] = [
+                'key' => $row['id'],
+                'label' => $row['label'],
+                'selected' => $row['id'] === $printoptions['voice'],
+            ];
+        }
 
         return [
             'cmid' => $cmid,
@@ -474,8 +512,11 @@ class job_manager {
             'state' => self::button_state($cmid, $hash),
             'printbackground' => $printoptions['printbackground'],
             'font' => $printoptions['font'],
+            'voice' => $printoptions['voice'],
+            'showvoice' => $allowstudentaudio && !empty($voices),
             'backgrounds' => $backgrounds,
             'fonts' => $fonts,
+            'voices' => $voices,
             'formats' => $result,
         ];
     }
@@ -489,7 +530,12 @@ class job_manager {
      * @return \stdClass|null
      */
     public static function ensure_shared_format(int $cmid, string $format, int $userid): ?\stdClass {
-        if (!in_array($format, [manager::FORMAT_DOCX, manager::FORMAT_PDF], true)) {
+        if (!in_array($format, [
+            manager::FORMAT_DOCX,
+            manager::FORMAT_PDF,
+            manager::FORMAT_EPUB,
+            manager::FORMAT_AUDIO,
+        ], true)) {
             return null;
         }
         $jobs = self::queue_formats($cmid, [$format], $userid, false, false, [], true);

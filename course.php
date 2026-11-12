@@ -41,14 +41,24 @@ $PAGE->set_pagelayout('admin');
 $PAGE->set_title(get_string('pluginname', 'local_learningprism'));
 $PAGE->set_heading($course->fullname);
 
+$courserec = manager::get_course_record($courseid);
 $form = new \local_learningprism\form\course_enable_form(null, ['courseid' => $courseid]);
-$form->set_data(['id' => $courseid, 'enabled' => manager::course_enabled($courseid) ? 1 : 0]);
+$form->set_data([
+    'id' => $courseid,
+    'enabled' => !empty($courserec->enabled) ? 1 : 0,
+    'allowstudentaudio' => !empty($courserec->allowstudentaudio) ? 1 : 0,
+    'defaultvoice' => (string) ($courserec->defaultvoice ?? ''),
+]);
 
 if ($form->is_cancelled()) {
     redirect(new moodle_url('/course/view.php', ['id' => $courseid]));
 }
 if ($data = $form->get_data()) {
-    manager::set_course_enabled($courseid, !empty($data->enabled));
+    manager::save_course_settings($courseid, [
+        'enabled' => !empty($data->enabled),
+        'allowstudentaudio' => !empty($data->allowstudentaudio),
+        'defaultvoice' => (string) ($data->defaultvoice ?? ''),
+    ]);
     redirect(
         new moodle_url('/course/view.php', ['id' => $courseid]),
         get_string('changessaved'),

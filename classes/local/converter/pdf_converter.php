@@ -47,23 +47,32 @@ class pdf_converter implements converter_interface {
     }
 
     public function convert(string $html, string $title, int $jobid, array $options = []): stored_file {
+        $pdf = $this->build_pdf($html, $title, $jobid, $options);
+        $filename = docx_converter::safe_filename($title) . '.pdf';
+        return filemanager::store_converted_file($jobid, $filename, 'application/pdf', $pdf);
+    }
+
+    /**
+     * Build PDF bytes without storing a Moodle file.
+     *
+     * @param string $html
+     * @param string $title
+     * @param int $jobid Used only by LibreOffice temp paths; 0 is fine for archive builds
+     * @param array $options
+     * @return string
+     */
+    public function build_pdf(string $html, string $title, int $jobid = 0, array $options = []): string {
         $engine = get_config('local_learningprism', 'pdfengine');
         switch ($engine) {
             case 'gotenberg':
-                $pdf = $this->via_gotenberg($html);
-                break;
+                return $this->via_gotenberg($html);
             case 'weasyprint':
-                $pdf = $this->via_weasyprint($html);
-                break;
+                return $this->via_weasyprint($html);
             case 'libreoffice':
-                $pdf = $this->via_libreoffice($html, $title, $jobid, $options);
-                break;
+                return $this->via_libreoffice($html, $title, $jobid, $options);
             default:
                 throw new \moodle_exception('error:pdfnotconfigured', 'local_learningprism');
         }
-
-        $filename = docx_converter::safe_filename($title) . '.pdf';
-        return filemanager::store_converted_file($jobid, $filename, 'application/pdf', $pdf);
     }
 
     /**
@@ -128,6 +137,11 @@ class pdf_converter implements converter_interface {
         file_put_contents($htmlfile, $html);
 
         $curl = new \curl();
+        // Gotenberg can be slow to connect (cold container / VPN); allow a long convert window.
+        $curl->setopt([
+            'CURLOPT_CONNECTTIMEOUT' => 30,
+            'CURLOPT_TIMEOUT' => 180,
+        ]);
         $curl->setHeader([
             'Content-Type: multipart/form-data',
         ]);
@@ -135,8 +149,13 @@ class pdf_converter implements converter_interface {
         $response = $curl->post($base . '/forms/chromium/convert/html', [
             'files' => new \CURLFile($htmlfile, 'text/html', 'index.html'),
         ]);
-        if ($curl->get_errno() || empty($response) || strpos($response, '%PDF') !== 0) {
-            throw new \moodle_exception('error:conversionfailed', 'local_learningprism');
+        if ($curl->get_errno() || empty($response) || strpos((string) $response, '%PDF') !== 0) {
+            throw new \moodle_exception(
+                'error:conversionfailed',
+                'local_learningprism',
+                '',
+                $this->engine_failure_detail($curl, (string) $response, 'Gotenberg')
+            );
         }
         return $response;
     }
@@ -150,16 +169,51 @@ class pdf_converter implements converter_interface {
     private function via_weasyprint(string $html): string {
         $base = $this->engine_base_url();
         $curl = new \curl();
+        $curl->setopt([
+            'CURLOPT_CONNECTTIMEOUT' => 30,
+            'CURLOPT_TIMEOUT' => 180,
+        ]);
         $curl->setHeader(['Content-Type: text/html; charset=utf-8']);
         $response = $curl->post($base . '/pdf', $html);
-        if ($curl->get_errno() || empty($response) || strpos($response, '%PDF') !== 0) {
+        if ($curl->get_errno() || empty($response) || strpos((string) $response, '%PDF') !== 0) {
             // Try alternate path used by some wrappers.
             $response = $curl->post($base, $html);
         }
-        if ($curl->get_errno() || empty($response) || strpos($response, '%PDF') !== 0) {
-            throw new \moodle_exception('error:conversionfailed', 'local_learningprism');
+        if ($curl->get_errno() || empty($response) || strpos((string) $response, '%PDF') !== 0) {
+            throw new \moodle_exception(
+                'error:conversionfailed',
+                'local_learningprism',
+                '',
+                $this->engine_failure_detail($curl, (string) $response, 'WeasyPrint')
+            );
         }
         return $response;
+    }
+
+    /**
+     * Human-readable detail for PDF engine HTTP failures.
+     *
+     * @param \curl $curl
+     * @param string $response
+     * @param string $enginelabel
+     * @return string
+     */
+    private function engine_failure_detail(\curl $curl, string $response, string $enginelabel): string {
+        $errno = (int) $curl->get_errno();
+        $error = trim((string) $curl->error);
+        $info = $curl->get_info();
+        $httpcode = (int) ($info['http_code'] ?? 0);
+        $base = (string) get_config('local_learningprism', 'pdfengineurl');
+
+        if ($errno) {
+            return $enginelabel . ' unreachable at ' . $base . ' (' . ($error !== '' ? $error : 'curl ' . $errno) . ')';
+        }
+        if ($httpcode > 0) {
+            $snippet = trim(preg_replace('/\s+/', ' ', substr(strip_tags($response), 0, 180)) ?? '');
+            return $enginelabel . ' HTTP ' . $httpcode
+                . ($snippet !== '' ? ': ' . $snippet : ' (non-PDF response)');
+        }
+        return $enginelabel . ' returned an empty or non-PDF response from ' . $base;
     }
 
     /**

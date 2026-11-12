@@ -61,6 +61,10 @@ class provider implements
             'local_learningprism_font',
             'privacy:metadata:preference:font'
         );
+        $collection->add_user_preference(
+            'local_learningprism_voice',
+            'privacy:metadata:preference:voice'
+        );
 
         $collection->add_database_table('local_learningprism_request', [
             'userid' => 'privacy:metadata:local_learningprism_request:userid',
@@ -168,6 +172,15 @@ class provider implements
                 get_string('privacy:metadata:preference:font', 'local_learningprism')
             );
         }
+        $voice = get_user_preferences('local_learningprism_voice', null, $userid);
+        if ($voice !== null && $voice !== '') {
+            writer::export_user_preference(
+                'local_learningprism',
+                'local_learningprism_voice',
+                $voice,
+                get_string('privacy:metadata:preference:voice', 'local_learningprism')
+            );
+        }
     }
 
     /**
@@ -204,17 +217,29 @@ class provider implements
             }
             $cmid = $context->instanceid;
             $jobs = $DB->get_records('local_learningprism_job', ['cmid' => $cmid, 'userid' => $userid]);
-            if ($jobs) {
-                $path = [get_string('pluginname', 'local_learningprism')];
-                writer::with_context($context)->export_data($path, (object) ['jobs' => array_values($jobs)]);
-                foreach ($jobs as $job) {
-                    if (empty($job->personal)) {
-                        continue;
-                    }
-                    $file = \local_learningprism\filemanager::get_job_file($job);
-                    if ($file) {
-                        writer::with_context($context)->export_file($path, $file);
-                    }
+            $requests = $DB->get_records_sql(
+                "SELECT r.*
+                   FROM {local_learningprism_request} r
+                   JOIN {local_learningprism_job} j ON j.id = r.jobid
+                  WHERE j.cmid = :cmid AND r.userid = :userid
+               ORDER BY r.timecreated ASC",
+                ['cmid' => $cmid, 'userid' => $userid]
+            );
+            if (!$jobs && !$requests) {
+                continue;
+            }
+            $path = [get_string('pluginname', 'local_learningprism')];
+            writer::with_context($context)->export_data($path, (object) [
+                'jobs' => array_values($jobs),
+                'requests' => array_values($requests),
+            ]);
+            foreach ($jobs as $job) {
+                if (empty($job->personal)) {
+                    continue;
+                }
+                $file = \local_learningprism\filemanager::get_job_file($job);
+                if ($file) {
+                    writer::with_context($context)->export_file($path, $file);
                 }
             }
         }
@@ -272,6 +297,7 @@ class provider implements
         $userid = $contextlist->get_user()->id;
         unset_user_preference('local_learningprism_printbackground', $userid);
         unset_user_preference('local_learningprism_font', $userid);
+        unset_user_preference('local_learningprism_voice', $userid);
         foreach ($contextlist->get_contexts() as $context) {
             if ($context->contextlevel == CONTEXT_COURSE) {
                 $DB->set_field(
@@ -291,26 +317,30 @@ class provider implements
             if ($context->contextlevel != CONTEXT_MODULE) {
                 continue;
             }
+            $cmid = $context->instanceid;
             $jobs = $DB->get_records('local_learningprism_job', [
-                'cmid' => $context->instanceid,
+                'cmid' => $cmid,
                 'userid' => $userid,
             ]);
             foreach ($jobs as $job) {
-                $DB->delete_records('local_learningprism_request', ['jobid' => $job->id]);
                 if (!empty($job->personal)) {
+                    // Personal job belongs only to this user — remove job, files, and its requests.
+                    $DB->delete_records('local_learningprism_request', ['jobid' => $job->id]);
                     \local_learningprism\filemanager::delete_job_files((int) $job->id);
                     $DB->delete_records('local_learningprism_job', ['id' => $job->id]);
                     continue;
                 }
-                // Keep shared conversion file; clear userid linkage.
+                // Shared job: keep the conversion for others; only clear this user's ownership.
                 $job->userid = 0;
                 $DB->update_record('local_learningprism_job', $job);
             }
+            // Delete this user's request/download rows on any job in the CM (including shared jobs
+            // owned by others). Never delete other users' request rows on a shared job.
             $jobids = $DB->get_fieldset_select(
                 'local_learningprism_job',
                 'id',
                 'cmid = :cmid',
-                ['cmid' => $context->instanceid]
+                ['cmid' => $cmid]
             );
             if ($jobids) {
                 list($jobinsql, $jobparams) = $DB->get_in_or_equal($jobids, SQL_PARAMS_NAMED, 'jobid');

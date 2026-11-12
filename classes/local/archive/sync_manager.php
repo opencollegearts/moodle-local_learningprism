@@ -236,7 +236,7 @@ class sync_manager {
             if ($e instanceof \moodle_exception && !empty($e->debuginfo)) {
                 $detail = $e->debuginfo;
             }
-            error_log('local_learningprism archive ' . (int) $record->id . ': ' . $detail);
+            debugging('local_learningprism archive ' . (int) $record->id . ': ' . $detail, DEBUG_DEVELOPER);
             $fresh = self::get_record((int) $record->courseid) ?? $record;
             $fresh->status = self::STATUS_ERROR;
             $fresh->errorinfo = self::safe_error_text($detail);
@@ -344,7 +344,8 @@ class sync_manager {
             if ($source['sourcetype'] !== collector::TYPE_ACTIVITY) {
                 continue;
             }
-            $job = job_manager::ensure_shared_format((int) $source['cmid'], manager::FORMAT_DOCX, $userid);
+            $format = (string) ($source['format'] ?? manager::FORMAT_DOCX);
+            $job = job_manager::ensure_shared_format((int) $source['cmid'], $format, $userid);
             if (!$job) {
                 $collected['skipped'][] = [
                     'name' => $source['displayname'],
@@ -369,7 +370,7 @@ class sync_manager {
         // Drop items no longer in the course inventory.
         $rows = $DB->get_records('local_learningprism_archiveitem', ['archiveid' => $record->id]);
         foreach ($rows as $row) {
-            $key = $row->sourcetype . ':' . $row->sectionnum . ':' . $row->cmid . ':' . $row->fileid;
+            $key = self::row_key($row);
             if (!isset($wantedkeys[$key])) {
                 filemanager::delete_archive_files((int) $row->id);
                 $DB->delete_records('local_learningprism_archiveitem', ['id' => $row->id]);
@@ -401,11 +402,15 @@ class sync_manager {
             self::upsert_item($record, $source);
         }
 
-        $rows = $DB->get_records('local_learningprism_archiveitem', ['archiveid' => $record->id], 'sectionnum ASC, itemindex ASC');
+        $rows = $DB->get_records(
+            'local_learningprism_archiveitem',
+            ['archiveid' => $record->id],
+            'sectionnum ASC, itemindex ASC, format ASC'
+        );
         $pending = null;
         $pendingsource = null;
         foreach ($rows as $row) {
-            $key = $row->sourcetype . ':' . $row->sectionnum . ':' . $row->cmid . ':' . $row->fileid;
+            $key = self::row_key($row);
             if (!isset($wanted[$key])) {
                 continue;
             }
@@ -579,7 +584,18 @@ class sync_manager {
      * @return string
      */
     private static function item_key(array $source): string {
-        return $source['sourcetype'] . ':' . $source['sectionnum'] . ':' . $source['cmid'] . ':' . $source['fileid'];
+        $format = (string) ($source['format'] ?? manager::FORMAT_DOCX);
+        return $source['sourcetype'] . ':' . $source['sectionnum'] . ':' . $source['cmid'] . ':'
+            . $source['fileid'] . ':' . $format;
+    }
+
+    /**
+     * @param \stdClass $row
+     * @return string
+     */
+    private static function row_key(\stdClass $row): string {
+        $format = (string) ($row->format ?? manager::FORMAT_DOCX);
+        return $row->sourcetype . ':' . $row->sectionnum . ':' . $row->cmid . ':' . $row->fileid . ':' . $format;
     }
 
     /**
@@ -588,12 +604,15 @@ class sync_manager {
      */
     private static function upsert_item(\stdClass $record, array $source): void {
         global $DB;
+        $format = (string) ($source['format'] ?? manager::FORMAT_DOCX);
+        $formatfolder = clean_filename((string) ($source['formatfolder'] ?? manager::archive_format_folder($format)));
         $existing = $DB->get_record('local_learningprism_archiveitem', [
             'archiveid' => $record->id,
             'sourcetype' => $source['sourcetype'],
             'sectionnum' => $source['sectionnum'],
             'cmid' => $source['cmid'],
             'fileid' => $source['fileid'],
+            'format' => $format,
         ]);
         $now = time();
         $displayname = clean_filename($source['displayname']);
@@ -605,6 +624,8 @@ class sync_manager {
             $existing->itemindex = (int) $source['itemindex'];
             $existing->displayname = $displayname;
             $existing->sectionfolder = clean_filename($source['sectionfolder']);
+            $existing->formatfolder = $formatfolder;
+            $existing->format = $format;
             $existing->contenthash = $source['contenthash'];
             $existing->timemodified = $now;
             $DB->update_record('local_learningprism_archiveitem', $existing);
@@ -617,10 +638,12 @@ class sync_manager {
             'sourcetype' => $source['sourcetype'],
             'cmid' => (int) $source['cmid'],
             'fileid' => (int) $source['fileid'],
+            'format' => $format,
             'contenthash' => $source['contenthash'],
             'drivefileid' => '',
             'displayname' => $displayname,
             'sectionfolder' => clean_filename($source['sectionfolder']),
+            'formatfolder' => $formatfolder,
             'status' => self::ITEM_QUEUED,
             'errorinfo' => null,
             'timemodified' => $now,
@@ -634,12 +657,14 @@ class sync_manager {
      */
     private static function mark_item_error(\stdClass $record, array $source, string $error): void {
         global $DB;
+        $format = (string) ($source['format'] ?? manager::FORMAT_DOCX);
         $existing = $DB->get_record('local_learningprism_archiveitem', [
             'archiveid' => $record->id,
             'sourcetype' => $source['sourcetype'],
             'sectionnum' => $source['sectionnum'],
             'cmid' => $source['cmid'],
             'fileid' => $source['fileid'],
+            'format' => $format,
         ]);
         if (!$existing) {
             return;
@@ -660,6 +685,10 @@ class sync_manager {
         global $DB;
 
         $sectionfolderid = $client->ensure_folder($row->sectionfolder, $record->folderid);
+        $formatfolder = clean_filename((string) ($source['formatfolder']
+            ?? $row->formatfolder
+            ?? manager::archive_format_folder((string) ($source['format'] ?? manager::FORMAT_DOCX))));
+        $formatfolderid = $client->ensure_folder($formatfolder, $sectionfolderid);
         $stored = self::local_file($row, $source, (int) $record->courseid);
         if (!$stored) {
             $row->status = self::ITEM_ERROR;
@@ -676,12 +705,14 @@ class sync_manager {
             $tmp,
             $source['displayname'],
             $source['mimetype'],
-            $sectionfolderid
+            $formatfolderid
         );
         $row->drivefileid = $uploaded['id'];
         $row->contenthash = $source['contenthash'];
         $row->displayname = clean_filename($source['displayname']);
         $row->sectionfolder = clean_filename($source['sectionfolder']);
+        $row->formatfolder = $formatfolder;
+        $row->format = (string) ($source['format'] ?? manager::FORMAT_DOCX);
         $row->itemindex = (int) $source['itemindex'];
         $row->status = self::ITEM_READY;
         $row->errorinfo = null;
@@ -704,18 +735,19 @@ class sync_manager {
             return $file ?: null;
         }
 
+        $format = (string) ($source['format'] ?? manager::FORMAT_DOCX);
         if ($source['sourcetype'] === collector::TYPE_ACTIVITY) {
             $job = $DB->get_record('local_learningprism_job', [
                 'cmid' => $source['cmid'],
                 'contenthash' => $source['contenthash'],
-                'format' => manager::FORMAT_DOCX,
+                'format' => $format,
                 'personal' => 0,
                 'status' => manager::STATUS_READY,
             ]);
             if (!$job) {
                 $jobs = $DB->get_records('local_learningprism_job', [
                     'cmid' => $source['cmid'],
-                    'format' => manager::FORMAT_DOCX,
+                    'format' => $format,
                     'personal' => 0,
                     'status' => manager::STATUS_READY,
                 ], 'timemodified DESC', '*', 0, 1);

@@ -31,8 +31,8 @@ defined('MOODLE_INTERNAL') || die();
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class google_provider implements tts_provider_interface {
-    /** Approximate safe chunk size for TTS requests. */
-    private const CHUNK_SIZE = 4000;
+    /** Approximate safe chunk size for TTS requests (Chirp 3 is tighter than Neural2). */
+    private const CHUNK_SIZE = 3000;
 
     public function is_configured(): bool {
         $json = access_token::tts_json();
@@ -43,7 +43,18 @@ class google_provider implements tts_provider_interface {
         $chunks = self::chunk_text($text, self::CHUNK_SIZE);
         $audio = '';
         foreach ($chunks as $chunk) {
+            if (trim($chunk) === '') {
+                continue;
+            }
             $audio .= $this->synthesize_chunk($chunk, $options);
+        }
+        if ($audio === '') {
+            throw new \moodle_exception(
+                'error:conversionfailed',
+                'local_learningprism',
+                '',
+                'Google TTS: no speech text after chunking'
+            );
         }
         return $audio;
     }
@@ -55,8 +66,15 @@ class google_provider implements tts_provider_interface {
      */
     private function synthesize_chunk(string $text, array $options): string {
         $token = access_token::for_tts();
-        $voice = $options['voice'] ?? get_config('local_learningprism', 'gcpvoice') ?: 'en-US-Neural2-A';
-        $language = $options['language'] ?? get_config('local_learningprism', 'gcplanguage') ?: 'en-US';
+        $voice = trim((string) ($options['voice'] ?? voice_catalog::site_default(voice_catalog::PROVIDER_GOOGLE)));
+        if ($voice === '') {
+            $voice = 'en-US-Neural2-A';
+        }
+        // Voice names encode the locale (en-GB-Chirp3-HD-Fenrir). Prefer that over a
+        // mismatched site language setting — Google rejects Chirp/Neural voices when
+        // languageCode does not match the voice prefix.
+        $language = self::language_for_voice($voice, $options['language'] ?? null);
+        $text = self::utf8_text($text);
 
         $payload = [
             'input' => ['text' => $text],
@@ -68,25 +86,130 @@ class google_provider implements tts_provider_interface {
                 'audioEncoding' => 'MP3',
             ],
         ];
+        $body = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+        if ($body === false || $body === '' || $body === 'null') {
+            throw new \moodle_exception(
+                'error:conversionfailed',
+                'local_learningprism',
+                '',
+                'Google TTS: failed to encode request JSON for voice ' . $voice
+            );
+        }
+
+        $headers = [
+            'Authorization: Bearer ' . $token,
+            'Content-Type: application/json; charset=utf-8',
+            'Content-Length: ' . (string) strlen($body),
+            'Accept: application/json',
+        ];
+        $project = access_token::tts_project_id();
+        if ($project !== '') {
+            // Required for some service-account calls when the token has no project quota.
+            $headers[] = 'x-goog-user-project: ' . $project;
+        }
 
         $curl = new \curl();
-        $curl->setHeader([
-            'Authorization: Bearer ' . $token,
-            'Content-Type: application/json',
-        ]);
+        $curl->setHeader($headers);
         $response = $curl->post(
             'https://texttospeech.googleapis.com/v1/text:synthesize',
-            json_encode($payload)
+            $body,
+            ['CURLOPT_TIMEOUT' => 120]
         );
-        $data = json_decode($response, true);
+        if ($curl->get_errno()) {
+            throw new \moodle_exception(
+                'error:conversionfailed',
+                'local_learningprism',
+                '',
+                'Google TTS curl: ' . $curl->error
+            );
+        }
+        $info = $curl->get_info();
+        $http = (int) ($info['http_code'] ?? 0);
+        $data = json_decode((string) $response, true);
         if (empty($data['audioContent'])) {
-            throw new \moodle_exception('error:conversionfailed', 'local_learningprism');
+            throw new \moodle_exception(
+                'error:conversionfailed',
+                'local_learningprism',
+                '',
+                self::api_error_detail($data, (string) $response, $voice, $language, $http)
+            );
         }
         $decoded = base64_decode($data['audioContent'], true);
-        if ($decoded === false) {
-            throw new \moodle_exception('error:conversionfailed', 'local_learningprism');
+        if ($decoded === false || $decoded === '') {
+            throw new \moodle_exception(
+                'error:conversionfailed',
+                'local_learningprism',
+                '',
+                'Google TTS returned invalid audio content'
+            );
         }
         return $decoded;
+    }
+
+    /**
+     * Prefer locale embedded in the voice name (en-GB-…).
+     *
+     * @param string $voice
+     * @param string|null $fallback
+     * @return string
+     */
+    public static function language_for_voice(string $voice, ?string $fallback = null): string {
+        if (preg_match('/^([a-z]{2,3}-[A-Z]{2})\b/', $voice, $matches)) {
+            return $matches[1];
+        }
+        $configured = trim((string) ($fallback ?? get_config('local_learningprism', 'gcplanguage') ?: 'en-US'));
+        return $configured !== '' ? $configured : 'en-US';
+    }
+
+    /**
+     * Ensure plain UTF-8 text for JSON + Google TTS.
+     *
+     * @param string $text
+     * @return string
+     */
+    private static function utf8_text(string $text): string {
+        if (!mb_check_encoding($text, 'UTF-8')) {
+            $converted = @iconv('UTF-8', 'UTF-8//IGNORE', $text);
+            if (is_string($converted) && $converted !== '') {
+                $text = $converted;
+            }
+        }
+        // Strip NULs and other controls that break some Google models.
+        $text = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F]/', '', $text) ?? $text;
+        return trim($text);
+    }
+
+    /**
+     * Human-readable Google API error for the course report / modal.
+     *
+     * @param array|null $data
+     * @param string $raw
+     * @param string $voice
+     * @param string $language
+     * @param int $http
+     * @return string
+     */
+    private static function api_error_detail(
+        ?array $data,
+        string $raw,
+        string $voice,
+        string $language,
+        int $http = 0
+    ): string {
+        $message = '';
+        if (is_array($data) && !empty($data['error']['message'])) {
+            $message = (string) $data['error']['message'];
+        } else if (is_array($data) && !empty($data['error']['status'])) {
+            $message = (string) $data['error']['status'];
+        } else {
+            $snippet = trim(preg_replace('/\s+/', ' ', substr(strip_tags($raw), 0, 180)) ?? '');
+            $message = $snippet !== '' ? $snippet : 'empty response';
+        }
+        $prefix = 'Google TTS (' . $voice . ' / ' . $language . ')';
+        if ($http > 0) {
+            $prefix .= ' HTTP ' . $http;
+        }
+        return $prefix . ': ' . $message;
     }
 
     /**

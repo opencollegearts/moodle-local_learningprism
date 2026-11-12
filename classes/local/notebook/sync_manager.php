@@ -172,7 +172,7 @@ class sync_manager {
             if ($e instanceof \moodle_exception && !empty($e->debuginfo)) {
                 $detail = $e->debuginfo;
             }
-            error_log('local_learningprism notebook ' . (int) $record->id . ': ' . $detail);
+            debugging('local_learningprism notebook ' . (int) $record->id . ': ' . $detail, DEBUG_DEVELOPER);
             $fresh = self::get_record((int) $record->courseid) ?? $record;
             $fresh->status = self::STATUS_ERROR;
             $fresh->errorinfo = self::safe_error_text($detail);
@@ -566,7 +566,7 @@ class sync_manager {
                 $client->get($record->notebookid);
                 return;
             } catch (\Throwable $e) {
-                error_log('local_learningprism notebook missing remotely: ' . $e->getMessage());
+                debugging('local_learningprism notebook missing remotely: ' . $e->getMessage(), DEBUG_DEVELOPER);
                 $record->notebookid = '';
             }
         }
@@ -595,7 +595,7 @@ class sync_manager {
                     $client->source_name($record->notebookid, $row->gsourceid),
                 ]);
             } catch (\Throwable $e) {
-                error_log('local_learningprism notebook delete source: ' . $e->getMessage());
+                debugging('local_learningprism notebook delete source: ' . $e->getMessage(), DEBUG_DEVELOPER);
             }
             $row->gsourceid = '';
         }

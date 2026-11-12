@@ -16,6 +16,8 @@
 
 namespace local_learningprism;
 
+use local_learningprism\local\tts\voice_catalog;
+
 defined('MOODLE_INTERNAL') || die();
 
 /**
@@ -27,7 +29,7 @@ defined('MOODLE_INTERNAL') || die();
  */
 class course_settings {
     /**
-     * Add enable checkbox to course edit form.
+     * Add enable checkbox and audio/voice fields to course edit form.
      *
      * @param \MoodleQuickForm $mform
      * @param int $courseid 0 when creating a course.
@@ -36,6 +38,12 @@ class course_settings {
         if (!manager::plugin_enabled()) {
             return;
         }
+        $record = $courseid ? manager::get_course_record($courseid) : (object) [
+            'enabled' => 0,
+            'allowstudentaudio' => 0,
+            'defaultvoice' => '',
+        ];
+
         $mform->addElement('header', 'learningprismheader', get_string('pluginname', 'local_learningprism'));
         $mform->addElement(
             'advcheckbox',
@@ -43,12 +51,34 @@ class course_settings {
             get_string('course:enable', 'local_learningprism')
         );
         $mform->addHelpButton('learningprism_enabled', 'course:enable', 'local_learningprism');
-        $enabled = $courseid ? manager::course_enabled($courseid) : false;
-        $mform->setDefault('learningprism_enabled', $enabled ? 1 : 0);
+        $mform->setDefault('learningprism_enabled', !empty($record->enabled) ? 1 : 0);
+
+        $mform->addElement(
+            'advcheckbox',
+            'learningprism_allowstudentaudio',
+            get_string('course:allowstudentaudio', 'local_learningprism')
+        );
+        $mform->addHelpButton('learningprism_allowstudentaudio', 'course:allowstudentaudio', 'local_learningprism');
+        $mform->setDefault('learningprism_allowstudentaudio', !empty($record->allowstudentaudio) ? 1 : 0);
+        $mform->disabledIf('learningprism_allowstudentaudio', 'learningprism_enabled');
+
+        $voiceoptions = ['' => get_string('course:defaultvoice_site', 'local_learningprism')];
+        foreach (voice_catalog::options_for_provider(voice_catalog::active_provider()) as $id => $label) {
+            $voiceoptions[$id] = $label;
+        }
+        $mform->addElement(
+            'select',
+            'learningprism_defaultvoice',
+            get_string('course:defaultvoice', 'local_learningprism'),
+            $voiceoptions
+        );
+        $mform->addHelpButton('learningprism_defaultvoice', 'course:defaultvoice', 'local_learningprism');
+        $mform->setDefault('learningprism_defaultvoice', (string) ($record->defaultvoice ?? ''));
+        $mform->disabledIf('learningprism_defaultvoice', 'learningprism_enabled');
     }
 
     /**
-     * Persist enable flag after course save.
+     * Persist settings after course save.
      *
      * @param \stdClass $course
      */
@@ -56,9 +86,15 @@ class course_settings {
         if (!manager::plugin_enabled()) {
             return;
         }
-        if (!isset($course->learningprism_enabled)) {
+        if (!isset($course->learningprism_enabled)
+                && !isset($course->learningprism_allowstudentaudio)
+                && !isset($course->learningprism_defaultvoice)) {
             return;
         }
-        manager::set_course_enabled((int) $course->id, !empty($course->learningprism_enabled));
+        manager::save_course_settings((int) $course->id, [
+            'enabled' => !empty($course->learningprism_enabled),
+            'allowstudentaudio' => !empty($course->learningprism_allowstudentaudio),
+            'defaultvoice' => (string) ($course->learningprism_defaultvoice ?? ''),
+        ]);
     }
 }

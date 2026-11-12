@@ -31,7 +31,7 @@ class elevenlabs_provider implements tts_provider_interface {
 
     public function is_configured(): bool {
         $key = trim((string) get_config('local_learningprism', 'elevenlabskey'));
-        $voice = trim((string) get_config('local_learningprism', 'elevenlabsvoice'));
+        $voice = voice_catalog::site_default(voice_catalog::PROVIDER_ELEVENLABS);
         // ElevenLabs secret keys start with sk_. Key IDs alone are rejected by the API.
         return $key !== '' && str_starts_with($key, 'sk_') && $voice !== '';
     }
@@ -67,7 +67,16 @@ class elevenlabs_provider implements tts_provider_interface {
      */
     private function synthesize_chunk(string $text, array $options): string {
         $key = trim((string) get_config('local_learningprism', 'elevenlabskey'));
-        $voice = trim((string) ($options['voice'] ?? get_config('local_learningprism', 'elevenlabsvoice')));
+        $voice = trim((string) ($options['voice'] ?? voice_catalog::site_default(voice_catalog::PROVIDER_ELEVENLABS)));
+        if ($voice === '') {
+            throw new \moodle_exception(
+                'error:ttsnotconfigured',
+                'local_learningprism',
+                '',
+                null,
+                'ElevenLabs voice ID missing'
+            );
+        }
         $url = self::API_BASE . '/text-to-speech/' . rawurlencode($voice);
 
         $payload = json_encode([

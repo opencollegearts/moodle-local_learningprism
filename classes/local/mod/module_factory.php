@@ -90,7 +90,7 @@ class module_factory {
                     'state' => $state,
                 ];
             } catch (\Throwable $e) {
-                error_log('local_learningprism skip cmid ' . $cm->id . ': ' . $e->getMessage());
+                debugging('local_learningprism skip cmid ' . $cm->id . ': ' . $e->getMessage(), DEBUG_DEVELOPER);
             }
         }
         return $instances;

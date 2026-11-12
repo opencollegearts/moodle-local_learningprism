@@ -76,6 +76,8 @@ class get_activity_formats extends external_api {
             'state' => new external_value(PARAM_ALPHA, 'State'),
             'printbackground' => new external_value(PARAM_ALPHA, 'User background preset'),
             'font' => new external_value(PARAM_ALPHANUMEXT, 'User font preset'),
+            'voice' => new external_value(PARAM_TEXT, 'User voice id'),
+            'showvoice' => new external_value(PARAM_BOOL, 'Show personal voice picker'),
             'backgrounds' => new external_multiple_structure(
                 new external_single_structure([
                     'key' => new external_value(PARAM_ALPHA, 'Preset key'),
@@ -86,6 +88,13 @@ class get_activity_formats extends external_api {
             'fonts' => new external_multiple_structure(
                 new external_single_structure([
                     'key' => new external_value(PARAM_ALPHANUMEXT, 'Preset key'),
+                    'label' => new external_value(PARAM_TEXT, 'Label'),
+                    'selected' => new external_value(PARAM_BOOL, 'Selected'),
+                ])
+            ),
+            'voices' => new external_multiple_structure(
+                new external_single_structure([
+                    'key' => new external_value(PARAM_TEXT, 'Voice id'),
                     'label' => new external_value(PARAM_TEXT, 'Label'),
                     'selected' => new external_value(PARAM_BOOL, 'Selected'),
                 ])

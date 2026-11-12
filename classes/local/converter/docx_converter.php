@@ -234,6 +234,20 @@ class docx_converter implements converter_interface {
             return $alt !== '' ? $this->p_xml($alt, 'Caption') : '';
         }
 
+        // Word cannot display SVG image parts — always rasterise before packaging.
+        if ($ext === 'svg') {
+            $png = image_helper::svg_to_png($binary);
+            if ($png === null || $png === '') {
+                debugging(
+                    'local_learningprism docx: SVG could not be rasterised; omitting image',
+                    DEBUG_DEVELOPER
+                );
+                return $alt !== '' ? $this->p_xml($alt, 'Caption') : '';
+            }
+            $binary = $png;
+            $ext = 'png';
+        }
+
         $index = count($this->media) + 1;
         $rid = 'rId' . (2 + $index);
         $name = 'image' . $index . '.' . $ext;

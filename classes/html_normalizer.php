@@ -65,33 +65,116 @@ class html_normalizer {
     /**
      * Plain text / light SSML-friendly text for TTS.
      *
-     * @param string $html
+     * When $title is provided (audio conversions), build a labelled script:
+     * "Title: … Content: …" — activity name once, skip Page/Book #intro description,
+     * and drop a leading content heading that merely repeats the title.
+     *
+     * @param string $html Normalised HTML document
+     * @param string $title Activity display name (empty = legacy flat extraction)
      * @return string
      */
-    public static function to_speech_text(string $html): string {
+    public static function to_speech_text(string $html, string $title = ''): string {
         $dom = new \DOMDocument();
         $previous = libxml_use_internal_errors(true);
-        $dom->loadHTML('<?xml encoding="utf-8" ?>' . $html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+        // Prefer a full HTML parse so <main>/<h1> are findable.
+        $dom->loadHTML('<?xml encoding="utf-8" ?>' . $html);
         libxml_clear_errors();
         libxml_use_internal_errors($previous);
 
+        $title = trim(html_to_text($title, 0, false));
+        if ($title !== '') {
+            $contentroot = null;
+            $mains = $dom->getElementsByTagName('main');
+            if ($mains->length > 0) {
+                $contentroot = $mains->item(0);
+            } else if ($dom->getElementsByTagName('body')->length > 0) {
+                $contentroot = $dom->getElementsByTagName('body')->item(0);
+            } else {
+                $contentroot = $dom->documentElement;
+            }
+            $parts = [];
+            self::walk_for_speech($contentroot, $parts, true);
+            $content = self::join_speech_parts($parts);
+            $content = self::strip_leading_title_echo($content, $title);
+            $script = get_string('speech:title', 'local_learningprism') . ' ' . self::ensure_sentence($title);
+            if ($content !== '') {
+                $script .= ' ' . get_string('speech:content', 'local_learningprism') . ' ' . $content;
+            }
+            return trim($script);
+        }
+
         $parts = [];
-        self::walk_for_speech($dom->documentElement, $parts);
-        $text = trim(preg_replace("/[ \t]+/", ' ', implode(' ', $parts)));
-        $text = preg_replace("/\n{3,}/", "\n\n", $text);
-        return $text;
+        self::walk_for_speech($dom->documentElement, $parts, false);
+        return self::join_speech_parts($parts);
+    }
+
+    /**
+     * Ensure a spoken phrase ends with a single sentence terminator.
+     *
+     * @param string $text
+     * @return string
+     */
+    private static function ensure_sentence(string $text): string {
+        $text = trim($text);
+        if ($text === '') {
+            return '';
+        }
+        if (preg_match('/[.!?]$/u', $text)) {
+            return $text;
+        }
+        return $text . '.';
+    }
+
+    /**
+     * @param string[] $parts
+     * @return string
+     */
+    private static function join_speech_parts(array $parts): string {
+        $text = trim(preg_replace("/[ \t]+/", ' ', implode(' ', $parts)) ?? '');
+        $text = preg_replace("/\n{3,}/", "\n\n", $text) ?? $text;
+        // Collapse "word ." artefacts from heading/paragraph closers.
+        $text = preg_replace('/\s+\./', '.', $text) ?? $text;
+        $text = preg_replace('/\.{2,}/', '.', $text) ?? $text;
+        return trim($text);
+    }
+
+    /**
+     * Remove a leading content phrase that duplicates the activity title.
+     *
+     * @param string $content
+     * @param string $title
+     * @return string
+     */
+    private static function strip_leading_title_echo(string $content, string $title): string {
+        $content = trim($content);
+        $title = trim($title);
+        if ($content === '' || $title === '') {
+            return $content;
+        }
+        $normtitle = \core_text::strtolower(preg_replace('/\s+/', ' ', $title) ?? $title);
+        $normcontent = \core_text::strtolower(preg_replace('/\s+/', ' ', $content) ?? $content);
+        if ($normcontent === $normtitle) {
+            return '';
+        }
+        // "Title. Rest…" or "Title Rest…"
+        $quoted = preg_quote($normtitle, '/');
+        if (preg_match('/^' . $quoted . '(?:\s*[.\-:]\s*|\s+)/u', $normcontent, $matches)) {
+            return trim(\core_text::substr($content, \core_text::strlen($matches[0])));
+        }
+        return $content;
     }
 
     /**
      * @param \DOMNode|null $node
      * @param string[] $parts
+     * @param bool $audiomode Skip document h1 and #intro (Page/Book description)
      */
-    private static function walk_for_speech(?\DOMNode $node, array &$parts): void {
+    private static function walk_for_speech(?\DOMNode $node, array &$parts, bool $audiomode = false): void {
         if (!$node) {
             return;
         }
         if ($node->nodeType === XML_TEXT_NODE) {
-            $t = trim(preg_replace('/\s+/', ' ', $node->nodeValue ?? ''));
+            $t = trim(preg_replace('/\s+/', ' ', $node->nodeValue ?? '') ?? '');
             if ($t !== '') {
                 $parts[] = $t;
             }
@@ -100,15 +183,27 @@ class html_normalizer {
         if ($node->nodeType !== XML_ELEMENT_NODE) {
             return;
         }
+        /** @var \DOMElement $node */
         $name = strtolower($node->nodeName);
-        if (in_array($name, ['script', 'style', 'noscript'], true)) {
+        if (in_array($name, ['script', 'style', 'noscript', 'head', 'title'], true)) {
             return;
+        }
+        if ($audiomode) {
+            $id = strtolower((string) $node->getAttribute('id'));
+            // Page/Book activity description — not spoken in audio.
+            if ($id === 'intro') {
+                return;
+            }
+            // Document title is spoken once via the Title: prefix, not from <h1>.
+            if ($name === 'h1') {
+                return;
+            }
         }
         if (in_array($name, ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'li', 'tr', 'br', 'div', 'section'], true)) {
             $parts[] = "\n";
         }
         foreach ($node->childNodes as $child) {
-            self::walk_for_speech($child, $parts);
+            self::walk_for_speech($child, $parts, $audiomode);
         }
         if (in_array($name, ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'li'], true)) {
             $parts[] = ".\n";
@@ -232,14 +327,15 @@ class html_normalizer {
     }
 
     /**
-     * Normalise print background + font keys.
+     * Normalise print background + font keys (+ optional voice id).
      *
      * @param array $options
-     * @return array{printbackground:string,font:string}
+     * @return array{printbackground:string,font:string,voice:string}
      */
     public static function normalise_print_options(array $options): array {
         $bg = (string) ($options['printbackground'] ?? '');
         $font = (string) ($options['font'] ?? '');
+        $voice = trim((string) ($options['voice'] ?? ''));
         $bgs = self::print_background_presets();
         $fonts = self::print_font_presets();
         if ($bg === '' || !isset($bgs[$bg])) {
@@ -251,25 +347,25 @@ class html_normalizer {
         if ($font === '' || !isset($fonts[$font])) {
             $font = 'default';
         }
-        return ['printbackground' => $bg, 'font' => $font];
+        return ['printbackground' => $bg, 'font' => $font, 'voice' => $voice];
     }
 
     /**
-     * Stable hash of print options for personal job identity.
+     * Stable hash of personal options for job identity.
      *
      * @param array $options
      * @return string
      */
     public static function print_options_hash(array $options): string {
         $options = self::normalise_print_options($options);
-        return sha1($options['printbackground'] . '|' . $options['font']);
+        return sha1($options['printbackground'] . '|' . $options['font'] . '|' . $options['voice']);
     }
 
     /**
-     * Current user's saved print options (falls back to site colour + default font).
+     * Current user's saved print/voice options.
      *
      * @param int $userid
-     * @return array{printbackground:string,font:string}
+     * @return array{printbackground:string,font:string,voice:string}
      */
     public static function user_print_options(int $userid = 0): array {
         global $USER;
@@ -278,25 +374,30 @@ class html_normalizer {
         }
         $bg = '';
         $font = 'default';
+        $voice = '';
         if ($userid > 0) {
             $bg = (string) get_user_preferences('local_learningprism_printbackground', '', $userid);
             $font = (string) get_user_preferences('local_learningprism_font', 'default', $userid);
+            $voice = (string) get_user_preferences('local_learningprism_voice', '', $userid);
         }
-        return self::normalise_print_options(['printbackground' => $bg, 'font' => $font]);
+        return self::normalise_print_options(['printbackground' => $bg, 'font' => $font, 'voice' => $voice]);
     }
 
     /**
-     * Persist print options as user preferences.
+     * Persist print/voice options as user preferences.
      *
      * @param int $userid
      * @param array $options
-     * @return array{printbackground:string,font:string}
+     * @return array{printbackground:string,font:string,voice:string}
      */
     public static function save_user_print_options(int $userid, array $options): array {
         $options = self::normalise_print_options($options);
         if ($userid > 0) {
             set_user_preference('local_learningprism_printbackground', $options['printbackground'], $userid);
             set_user_preference('local_learningprism_font', $options['font'], $userid);
+            if ($options['voice'] !== '') {
+                set_user_preference('local_learningprism_voice', $options['voice'], $userid);
+            }
         }
         return $options;
     }

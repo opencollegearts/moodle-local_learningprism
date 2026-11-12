@@ -32,7 +32,7 @@ defined('MOODLE_INTERNAL') || die();
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class collector {
-    /** PDF and DOCX only (no audio/video). */
+    /** Native course files that can be archived as-is. */
     public const FILE_TYPES = [
         'pdf' => 'application/pdf',
         'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -52,6 +52,7 @@ class collector {
         $course = get_course($courseid);
         $modinfo = get_fast_modinfo($course);
         $maxbytes = settings::max_bytes();
+        $archiveformats = manager::archive_formats();
         $sources = [];
         $skipped = [];
         $sectionsmeta = [];
@@ -70,17 +71,19 @@ class collector {
             if ($summaryhtml !== '') {
                 $itemindex++;
                 $basename = self::indexed_name($itemindex, get_string('archive:sectionoverview', 'local_learningprism'));
-                $sectionitems[] = [
-                    'sourcetype' => self::TYPE_SECTION,
-                    'sectionnum' => (int) $section->section,
-                    'itemindex' => $itemindex,
-                    'cmid' => 0,
-                    'fileid' => 0,
-                    'contenthash' => html_normalizer::content_hash($summaryhtml),
-                    'displayname' => $basename . '.docx',
-                    'mimetype' => self::FILE_TYPES['docx'],
-                    'format' => manager::FORMAT_DOCX,
-                ];
+                self::append_converted_formats(
+                    $sectionitems,
+                    [
+                        'sourcetype' => self::TYPE_SECTION,
+                        'sectionnum' => (int) $section->section,
+                        'itemindex' => $itemindex,
+                        'cmid' => 0,
+                        'fileid' => 0,
+                        'contenthash' => html_normalizer::content_hash($summaryhtml),
+                        'basename' => $basename,
+                    ],
+                    $archiveformats
+                );
             }
 
             foreach ($cmids as $cmid) {
@@ -89,17 +92,17 @@ class collector {
                     continue;
                 }
                 if (in_array($cm->modname, manager::supported_modules(), true)) {
-                    $added = self::add_activity($cm, $itemindex, $section->section, $sectionitems, $skipped);
+                    $added = self::add_activity($cm, $itemindex, $section->section, $sectionitems, $skipped, $archiveformats);
                     if ($added) {
                         $itemindex = $added;
                     }
                 } else if ($cm->modname === 'assign') {
-                    $added = self::add_assign($cm, $itemindex, $section->section, $sectionitems, $skipped);
+                    $added = self::add_assign($cm, $itemindex, $section->section, $sectionitems, $skipped, $archiveformats);
                     if ($added) {
                         $itemindex = $added;
                     }
                 } else if ($cm->modname === 'forum') {
-                    $added = self::add_forum($cm, $itemindex, $section->section, $sectionitems, $skipped);
+                    $added = self::add_forum($cm, $itemindex, $section->section, $sectionitems, $skipped, $archiveformats);
                     if ($added) {
                         $itemindex = $added;
                     }
@@ -110,7 +113,8 @@ class collector {
                         (int) $section->section,
                         $maxbytes,
                         $sectionitems,
-                        $skipped
+                        $skipped,
+                        $archiveformats
                     );
                 }
             }
@@ -133,6 +137,47 @@ class collector {
         }
 
         return ['sources' => $sources, 'skipped' => $skipped, 'sections' => $sectionsmeta];
+    }
+
+    /**
+     * Emit one archive source per enabled converted format.
+     *
+     * @param array $sectionitems
+     * @param array $base Shared fields including basename (no extension)
+     * @param string[] $archiveformats
+     */
+    private static function append_converted_formats(array &$sectionitems, array $base, array $archiveformats): void {
+        $meta = [
+            manager::FORMAT_DOCX => [
+                'ext' => 'docx',
+                'mime' => self::FILE_TYPES['docx'],
+            ],
+            manager::FORMAT_PDF => [
+                'ext' => 'pdf',
+                'mime' => self::FILE_TYPES['pdf'],
+            ],
+            manager::FORMAT_EPUB => [
+                'ext' => 'epub',
+                'mime' => 'application/epub+zip',
+            ],
+            manager::FORMAT_AUDIO => [
+                'ext' => 'mp3',
+                'mime' => 'audio/mpeg',
+            ],
+        ];
+        $basename = $base['basename'];
+        unset($base['basename']);
+        foreach ($archiveformats as $format) {
+            if (!isset($meta[$format])) {
+                continue;
+            }
+            $sectionitems[] = array_merge($base, [
+                'displayname' => $basename . '.' . $meta[$format]['ext'],
+                'mimetype' => $meta[$format]['mime'],
+                'format' => $format,
+                'formatfolder' => manager::archive_format_folder($format),
+            ]);
+        }
     }
 
     /**
@@ -163,6 +208,23 @@ class collector {
      */
     public static function mime_for_file(stored_file $file): ?string {
         return self::mime_for_name($file->get_filename(), (string) $file->get_mimetype());
+    }
+
+    /**
+     * Map native file extension to archive format key.
+     *
+     * @param string $filename
+     * @return string|null
+     */
+    public static function format_for_filename(string $filename): ?string {
+        $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+        if ($ext === 'pdf') {
+            return manager::FORMAT_PDF;
+        }
+        if ($ext === 'docx') {
+            return manager::FORMAT_DOCX;
+        }
+        return null;
     }
 
     /**
@@ -208,9 +270,17 @@ class collector {
      * @param int $sectionnum
      * @param array $sectionitems
      * @param array $skipped
+     * @param string[] $archiveformats
      * @return int|false New item index or false
      */
-    private static function add_activity($cm, int $itemindex, int $sectionnum, array &$sectionitems, array &$skipped) {
+    private static function add_activity(
+        $cm,
+        int $itemindex,
+        int $sectionnum,
+        array &$sectionitems,
+        array &$skipped,
+        array $archiveformats
+    ) {
         try {
             $module = module_factory::instance_from_cmid((int) $cm->id);
             $hash = $module->get_content_hash();
@@ -222,18 +292,19 @@ class collector {
             return false;
         }
         $itemindex++;
-        $basename = self::indexed_name($itemindex, $cm->name);
-        $sectionitems[] = [
-            'sourcetype' => self::TYPE_ACTIVITY,
-            'sectionnum' => $sectionnum,
-            'itemindex' => $itemindex,
-            'cmid' => (int) $cm->id,
-            'fileid' => 0,
-            'contenthash' => $hash,
-            'displayname' => $basename . '.docx',
-            'mimetype' => self::FILE_TYPES['docx'],
-            'format' => manager::FORMAT_DOCX,
-        ];
+        self::append_converted_formats(
+            $sectionitems,
+            [
+                'sourcetype' => self::TYPE_ACTIVITY,
+                'sectionnum' => $sectionnum,
+                'itemindex' => $itemindex,
+                'cmid' => (int) $cm->id,
+                'fileid' => 0,
+                'contenthash' => $hash,
+                'basename' => self::indexed_name($itemindex, $cm->name),
+            ],
+            $archiveformats
+        );
         return $itemindex;
     }
 
@@ -243,9 +314,17 @@ class collector {
      * @param int $sectionnum
      * @param array $sectionitems
      * @param array $skipped
+     * @param string[] $archiveformats
      * @return int|false
      */
-    private static function add_assign($cm, int $itemindex, int $sectionnum, array &$sectionitems, array &$skipped) {
+    private static function add_assign(
+        $cm,
+        int $itemindex,
+        int $sectionnum,
+        array &$sectionitems,
+        array &$skipped,
+        array $archiveformats
+    ) {
         try {
             $html = docx_builder::assign_html($cm);
             $hash = html_normalizer::content_hash($html);
@@ -257,18 +336,19 @@ class collector {
             return false;
         }
         $itemindex++;
-        $basename = self::indexed_name($itemindex, $cm->name);
-        $sectionitems[] = [
-            'sourcetype' => self::TYPE_ASSIGN,
-            'sectionnum' => $sectionnum,
-            'itemindex' => $itemindex,
-            'cmid' => (int) $cm->id,
-            'fileid' => 0,
-            'contenthash' => $hash,
-            'displayname' => $basename . '.docx',
-            'mimetype' => self::FILE_TYPES['docx'],
-            'format' => manager::FORMAT_DOCX,
-        ];
+        self::append_converted_formats(
+            $sectionitems,
+            [
+                'sourcetype' => self::TYPE_ASSIGN,
+                'sectionnum' => $sectionnum,
+                'itemindex' => $itemindex,
+                'cmid' => (int) $cm->id,
+                'fileid' => 0,
+                'contenthash' => $hash,
+                'basename' => self::indexed_name($itemindex, $cm->name),
+            ],
+            $archiveformats
+        );
         return $itemindex;
     }
 
@@ -278,9 +358,17 @@ class collector {
      * @param int $sectionnum
      * @param array $sectionitems
      * @param array $skipped
+     * @param string[] $archiveformats
      * @return int|false
      */
-    private static function add_forum($cm, int $itemindex, int $sectionnum, array &$sectionitems, array &$skipped) {
+    private static function add_forum(
+        $cm,
+        int $itemindex,
+        int $sectionnum,
+        array &$sectionitems,
+        array &$skipped,
+        array $archiveformats
+    ) {
         try {
             $html = docx_builder::forum_html($cm);
             $hash = html_normalizer::content_hash($html);
@@ -292,18 +380,19 @@ class collector {
             return false;
         }
         $itemindex++;
-        $basename = self::indexed_name($itemindex, $cm->name);
-        $sectionitems[] = [
-            'sourcetype' => self::TYPE_FORUM,
-            'sectionnum' => $sectionnum,
-            'itemindex' => $itemindex,
-            'cmid' => (int) $cm->id,
-            'fileid' => 0,
-            'contenthash' => $hash,
-            'displayname' => $basename . '.docx',
-            'mimetype' => self::FILE_TYPES['docx'],
-            'format' => manager::FORMAT_DOCX,
-        ];
+        self::append_converted_formats(
+            $sectionitems,
+            [
+                'sourcetype' => self::TYPE_FORUM,
+                'sectionnum' => $sectionnum,
+                'itemindex' => $itemindex,
+                'cmid' => (int) $cm->id,
+                'fileid' => 0,
+                'contenthash' => $hash,
+                'basename' => self::indexed_name($itemindex, $cm->name),
+            ],
+            $archiveformats
+        );
         return $itemindex;
     }
 
@@ -314,6 +403,7 @@ class collector {
      * @param int $maxbytes
      * @param array $sectionitems
      * @param array $skipped
+     * @param string[] $archiveformats
      * @return int Updated item index
      */
     private static function add_module_files(
@@ -322,7 +412,8 @@ class collector {
         int $sectionnum,
         int $maxbytes,
         array &$sectionitems,
-        array &$skipped
+        array &$skipped,
+        array $archiveformats
     ): int {
         $fs = get_file_storage();
         $context = \context_module::instance($cm->id);
@@ -331,6 +422,10 @@ class collector {
         foreach ($files as $file) {
             $mime = self::mime_for_file($file);
             if ($mime === null) {
+                continue;
+            }
+            $format = self::format_for_filename($file->get_filename());
+            if ($format === null || !in_array($format, $archiveformats, true)) {
                 continue;
             }
             if ($file->get_filesize() > $maxbytes) {
@@ -352,7 +447,8 @@ class collector {
                 'contenthash' => $file->get_contenthash(),
                 'displayname' => $basename . ($ext !== '' ? '.' . $ext : ''),
                 'mimetype' => $mime,
-                'format' => '',
+                'format' => $format,
+                'formatfolder' => manager::archive_format_folder($format),
             ];
         }
         return $itemindex;

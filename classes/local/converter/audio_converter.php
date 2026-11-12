@@ -46,9 +46,9 @@ class audio_converter implements converter_interface {
     }
 
     public function convert(string $html, string $title, int $jobid, array $options = []): stored_file {
-        $text = html_normalizer::to_speech_text($html);
+        $text = html_normalizer::to_speech_text($html, $title);
         if (trim($text) === '') {
-            throw new \moodle_exception('error:conversionfailed', 'local_learningprism');
+            throw new \moodle_exception('error:conversionfailed', 'local_learningprism', '', 'No speech text in activity');
         }
         $provider = tts_factory::instance();
         $audio = $provider->synthesize($text, $options);

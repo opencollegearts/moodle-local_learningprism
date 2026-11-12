@@ -70,12 +70,11 @@ class notifier {
                 return;
             }
 
-            // Local/dev sites often have invalid noreply@localhost. Whoops turns
-            // Moodle's debugging() about that into exceptions — never let that
-            // break conversion success handling.
+            // Skip email when noreply is unusable (common on local/dev). Avoids
+            // Moodle's own noreply debugging notices during message_send().
             $noreply = !empty($CFG->noreplyaddress) ? (string) $CFG->noreplyaddress : '';
             if ($noreply === '' || stripos($noreply, '@localhost') !== false || !validate_email($noreply)) {
-                error_log('local_learningprism: skip email notify (invalid noreplyaddress)');
+                debugging('local_learningprism: skip email notify (invalid noreplyaddress)', DEBUG_DEVELOPER);
                 return;
             }
 
@@ -95,7 +94,7 @@ class notifier {
 
             message_send($message);
         } catch (\Throwable $e) {
-            error_log('local_learningprism notifier: ' . $e->getMessage());
+            debugging('local_learningprism notifier: ' . $e->getMessage(), DEBUG_DEVELOPER);
         }
     }
 }

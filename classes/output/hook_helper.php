@@ -105,8 +105,8 @@ class hook_helper {
             ]);
             self::$initialised = true;
         } catch (\Throwable $e) {
-            // Do not call debugging() — Open LMS/Whoops promotes notices to fatals.
-            error_log('local_learningprism hook_helper: ' . $e->getMessage());
+            // Developer diagnostics only (DEBUG_DEVELOPER).
+            debugging('local_learningprism hook_helper: ' . $e->getMessage(), DEBUG_DEVELOPER);
         }
 
         return '';

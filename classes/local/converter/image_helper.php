@@ -118,9 +118,12 @@ class image_helper {
             return null;
         }
         [$width, $height] = self::svg_dimensions($svg);
+        // Pad tiny/flat viewBoxes so Chromium still paints stroked lines.
+        $width = max(16, $width);
+        $height = max(16, $height);
         $html = '<!DOCTYPE html><html><head><meta charset="utf-8"/><style>'
             . 'html,body{margin:0;padding:0;background:transparent;}'
-            . 'svg,img{display:block;width:' . $width . 'px;height:' . $height . 'px;}'
+            . 'svg{display:block;width:' . $width . 'px;height:' . $height . 'px;}'
             . '</style></head><body>' . $svg . '</body></html>';
 
         $tmpdir = make_request_directory();
@@ -129,22 +132,55 @@ class image_helper {
             return null;
         }
 
-        try {
-            $curl = new \curl();
-            $response = $curl->post($base . '/forms/chromium/screenshot/html', [
-                'files' => new \CURLFile($htmlfile, 'text/html', 'index.html'),
+        $attempts = [
+            [
                 'format' => 'png',
                 'width' => (string) $width,
                 'height' => (string) $height,
                 'omitBackground' => 'true',
-            ]);
-            if ($curl->get_errno() || !is_string($response) || !self::is_png($response)) {
-                return null;
+            ],
+            [
+                'format' => 'png',
+                'width' => (string) $width,
+                'height' => (string) $height,
+            ],
+            [
+                'format' => 'png',
+                'clip' => 'true',
+                'omitBackground' => 'true',
+            ],
+            [
+                'format' => 'png',
+            ],
+        ];
+
+        foreach ($attempts as $fields) {
+            for ($try = 0; $try < 2; $try++) {
+                try {
+                    $curl = new \curl();
+                    $curl->setopt([
+                        'CURLOPT_CONNECTTIMEOUT' => 30,
+                        'CURLOPT_TIMEOUT' => 90,
+                    ]);
+                    $post = array_merge([
+                        'files' => new \CURLFile($htmlfile, 'text/html', 'index.html'),
+                    ], $fields);
+                    $response = $curl->post($base . '/forms/chromium/screenshot/html', $post);
+                    if (!$curl->get_errno() && is_string($response) && self::is_png($response)) {
+                        return $response;
+                    }
+                    debugging(
+                        'local_learningprism svg screenshot failed: errno=' . $curl->get_errno()
+                        . ' http=' . (($curl->get_info()['http_code'] ?? 0))
+                        . ' err=' . $curl->error,
+                        DEBUG_DEVELOPER
+                    );
+                } catch (\Throwable $e) {
+                    debugging('local_learningprism svg screenshot: ' . $e->getMessage(), DEBUG_DEVELOPER);
+                }
             }
-            return $response;
-        } catch (\Throwable $unused) {
-            return null;
         }
+        return null;
     }
 
     /**

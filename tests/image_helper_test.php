@@ -54,6 +54,19 @@ class image_helper_test extends \advanced_testcase {
     }
 
     /**
+     * Wide decorative SVGs (e.g. Rise speech-close dividers) keep aspect ratio.
+     */
+    public function test_svg_dimensions_wide_divider(): void {
+        $svg = '<?xml version="1.0" encoding="UTF-8"?>'
+            . '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 921.7 82.36">'
+            . '<circle cx="460" cy="41" r="30" fill="#67eefb"/>'
+            . '</svg>';
+        [$width, $height] = image_helper::svg_dimensions($svg);
+        $this->assertSame(922, $width);
+        $this->assertSame(82, $height);
+    }
+
+    /**
      * Tests DOCX/EPUB embed SVG as PNG when a rasteriser is available.
      */
     public function test_docx_and_epub_embed_svg_as_png(): void {

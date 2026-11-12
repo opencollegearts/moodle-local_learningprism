@@ -95,7 +95,7 @@ class drive_client {
         try {
             $this->request('DELETE', '/files/' . $id . '?supportsAllDrives=true');
         } catch (\Throwable $e) {
-            error_log('local_learningprism archive delete: ' . $e->getMessage());
+            debugging('local_learningprism archive delete: ' . $e->getMessage(), DEBUG_DEVELOPER);
         }
     }
 
@@ -268,7 +268,7 @@ class drive_client {
             try {
                 $this->delete_permission($fileid, (string) $perm['id']);
             } catch (\Throwable $e) {
-                error_log('local_learningprism archive delete permission: ' . $e->getMessage());
+                debugging('local_learningprism archive delete permission: ' . $e->getMessage(), DEBUG_DEVELOPER);
             }
         }
         foreach ($targets as $target) {

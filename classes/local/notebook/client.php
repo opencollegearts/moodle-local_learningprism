@@ -101,43 +101,30 @@ class client {
         if (!is_readable($filepath)) {
             throw new \moodle_exception('error:notebookupload', 'local_learningprism');
         }
-        $size = filesize($filepath);
-        $fh = fopen($filepath, 'rb');
-        if ($fh === false) {
+        $filedata = file_get_contents($filepath);
+        if ($filedata === false) {
             throw new \moodle_exception('error:notebookupload', 'local_learningprism');
         }
 
         $url = $this->upload_url() . '/' . rawurlencode($notebookid) . '/sources:uploadFile';
-        $headers = [
+        $curl = new \curl();
+        $curl->setHeader([
             'Authorization: Bearer ' . access_token::for_notebook(),
             'X-Goog-Upload-File-Name: ' . $this->header_filename($displayname),
             'X-Goog-Upload-Protocol: raw',
             'Content-Type: ' . $contenttype,
-            'Content-Length: ' . (string) $size,
-        ];
-
-        $ch = curl_init($url);
-        curl_setopt_array($ch, [
-            CURLOPT_CUSTOMREQUEST => 'POST',
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_HTTPHEADER => $headers,
-            CURLOPT_UPLOAD => true,
-            CURLOPT_INFILE => $fh,
-            CURLOPT_INFILESIZE => $size,
-            CURLOPT_TIMEOUT => 180,
+            'Content-Length: ' . (string) strlen($filedata),
         ]);
-        $raw = curl_exec($ch);
-        $errno = curl_errno($ch);
-        $http = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-        fclose($fh);
+        $raw = $curl->post($url, $filedata, ['CURLOPT_TIMEOUT' => 180]);
+        $info = $curl->get_info();
+        $http = (int) ($info['http_code'] ?? 0);
 
-        if ($errno || $raw === false) {
+        if ($curl->get_errno() || $raw === false) {
             throw new \moodle_exception('error:notebookapi', 'local_learningprism');
         }
         $data = json_decode((string) $raw, true);
         if ($http >= 400 || empty($data['sourceId']['id'])) {
-            $message = $this->error_message($data, $raw);
+            $message = $this->error_message(is_array($data) ? $data : [], (string) $raw);
             throw new \moodle_exception('error:notebookapi', 'local_learningprism', '', null, $message);
         }
         return $data;

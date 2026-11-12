@@ -22,6 +22,7 @@ use core_external\external_multiple_structure;
 use core_external\external_single_structure;
 use core_external\external_value;
 use local_learningprism\job_manager;
+use local_learningprism\local\tts\voice_catalog;
 use local_learningprism\manager;
 
 defined('MOODLE_INTERNAL') || die();
@@ -48,9 +49,10 @@ class request_formats extends external_api {
                 VALUE_DEFAULT,
                 []
             ),
-            'personal' => new external_value(PARAM_BOOL, 'Request a private print version', VALUE_DEFAULT, false),
+            'personal' => new external_value(PARAM_BOOL, 'Request a private print/audio version', VALUE_DEFAULT, false),
             'printbackground' => new external_value(PARAM_ALPHA, 'Personal background preset', VALUE_DEFAULT, ''),
             'font' => new external_value(PARAM_ALPHANUMEXT, 'Personal font preset', VALUE_DEFAULT, ''),
+            'voice' => new external_value(PARAM_TEXT, 'Personal TTS voice id', VALUE_DEFAULT, ''),
         ]);
     }
 
@@ -60,6 +62,7 @@ class request_formats extends external_api {
      * @param bool $personal
      * @param string $printbackground
      * @param string $font
+     * @param string $voice
      * @return array
      */
     public static function execute(
@@ -67,7 +70,8 @@ class request_formats extends external_api {
         array $formats = [],
         bool $personal = false,
         string $printbackground = '',
-        string $font = ''
+        string $font = '',
+        string $voice = ''
     ): array {
         global $USER;
 
@@ -77,6 +81,7 @@ class request_formats extends external_api {
             'personal' => $personal,
             'printbackground' => $printbackground,
             'font' => $font,
+            'voice' => $voice,
         ]);
         $cm = get_coursemodule_from_id(null, $params['cmid'], 0, false, MUST_EXIST);
         $context = \context_module::instance($cm->id);
@@ -87,9 +92,22 @@ class request_formats extends external_api {
             throw new \moodle_exception('error:notenabled', 'local_learningprism');
         }
 
+        $courseid = (int) $cm->course;
         $requested = $params['formats'];
         if (!$requested) {
-            $requested = manager::enabled_formats();
+            $requested = manager::enabled_formats_for_user($courseid, (int) $USER->id);
+        }
+
+        $voiceid = trim((string) $params['voice']);
+        if ($voiceid !== '' && !voice_catalog::is_valid(voice_catalog::active_provider(), $voiceid)) {
+            $voiceid = '';
+        }
+        if ($params['personal'] && in_array(manager::FORMAT_AUDIO, $requested, true)
+                && !manager::course_allows_student_audio($courseid)
+                && !has_capability('local/learningprism:manage', $context)) {
+            $requested = array_values(array_filter($requested, static function(string $format): bool {
+                return $format !== manager::FORMAT_AUDIO;
+            }));
         }
 
         $forceregenerate = !$params['personal'] && has_capability('local/learningprism:manage', $context);
@@ -102,6 +120,7 @@ class request_formats extends external_api {
             [
                 'printbackground' => $params['printbackground'],
                 'font' => $params['font'],
+                'voice' => $voiceid,
             ]
         );
         $statuses = job_manager::get_activity_format_statuses($params['cmid']);

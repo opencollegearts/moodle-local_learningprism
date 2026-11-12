@@ -41,7 +41,7 @@ class after_form_definition {
             }
             course_settings::add_form_fields($hook->mform, $courseid);
         } catch (\Throwable $e) {
-            error_log('local_learningprism after_form_definition: ' . $e->getMessage());
+            debugging('local_learningprism after_form_definition: ' . $e->getMessage(), DEBUG_DEVELOPER);
         }
     }
 }

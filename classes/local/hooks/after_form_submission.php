@@ -40,7 +40,7 @@ class after_form_submission {
             }
             course_settings::save_from_course($data);
         } catch (\Throwable $e) {
-            error_log('local_learningprism after_form_submission: ' . $e->getMessage());
+            debugging('local_learningprism after_form_submission: ' . $e->getMessage(), DEBUG_DEVELOPER);
         }
     }
 }

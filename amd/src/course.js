@@ -29,13 +29,15 @@ define([
     'core/ajax',
     'core/notification',
     'core/templates',
-    'core/str'
-], function($, Ajax, Notification, Templates, Str) {
+    'core/str',
+    'core/toast'
+], function($, Ajax, Notification, Templates, Str, Toast) {
     var pageCourseId = 0;
     var courseInstances = [];
     var injecting = {};
     var injectTimer = null;
     var observerStarted = false;
+    var pollTimers = {};
     var stateTitles = {
         request: '',
         processing: '',
@@ -54,6 +56,10 @@ define([
     };
 
     var updateIconState = function(cmid, state) {
+        // Normalise queued → processing for the activity icon.
+        if (state === 'queued') {
+            state = 'processing';
+        }
         var buttons = document.querySelectorAll('[data-lp-cmid="' + cmid + '"]');
         var i;
         for (i = 0; i < buttons.length; i++) {
@@ -64,6 +70,110 @@ define([
             btn.setAttribute('title', stateTitle(state));
             btn.setAttribute('aria-label', stateTitle(state));
         }
+        courseInstances.forEach(function(inst) {
+            if (String(inst.cmid) === String(cmid)) {
+                inst.state = state;
+            }
+        });
+    };
+
+    /**
+     * Close the formats modal and clean up any Bootstrap backdrop.
+     *
+     * @param {jQuery} $modal
+     */
+    var closeModal = function($modal) {
+        if (!$modal || !$modal.length) {
+            return;
+        }
+        try {
+            if (typeof window.bootstrap !== 'undefined' && window.bootstrap.Modal) {
+                var instance = window.bootstrap.Modal.getInstance($modal[0]);
+                if (instance) {
+                    instance.hide();
+                }
+            } else if (typeof $modal.modal === 'function') {
+                $modal.modal('hide');
+            }
+        } catch (e) {
+            // Fall through to forced remove.
+        }
+        $modal.remove();
+        $('.modal-backdrop').remove();
+        $('body').removeClass('modal-open').css({overflow: '', 'padding-right': ''});
+    };
+
+    /**
+     * Show a toast confirmation (always visible in the viewport).
+     *
+     * @param {string} message
+     * @param {string} [type]
+     */
+    var showFeedback = function(message, type) {
+        Toast.add(message, {
+            type: type || 'info',
+            autohide: true,
+            closeButton: true,
+            delay: 5000
+        });
+    };
+
+    /**
+     * Poll activity format status so icons update without a full page reload.
+     *
+     * @param {number|string} cmid
+     */
+    var startStatusPoll = function(cmid) {
+        var key = String(cmid);
+        if (pollTimers[key]) {
+            window.clearInterval(pollTimers[key]);
+        }
+        var attempts = 0;
+        var maxAttempts = 90; // ~3 minutes at 2s.
+        pollTimers[key] = window.setInterval(function() {
+            attempts += 1;
+            Ajax.call([{
+                methodname: 'local_learningprism_get_activity_formats',
+                args: {cmid: parseInt(key, 10)}
+            }])[0].then(function(data) {
+                var state = data.state || 'request';
+                updateIconState(key, state);
+                if (state === 'download' || state === 'error' || state === 'request' || attempts >= maxAttempts) {
+                    window.clearInterval(pollTimers[key]);
+                    delete pollTimers[key];
+                    if (state === 'download') {
+                        Str.get_string('modal:statusready', 'local_learningprism').then(function(msg) {
+                            showFeedback(msg, 'success');
+                        }).catch(function() {
+                            // Ignore string load failures.
+                        });
+                    }
+                }
+            }).catch(function() {
+                if (attempts >= maxAttempts) {
+                    window.clearInterval(pollTimers[key]);
+                    delete pollTimers[key];
+                }
+            });
+        }, 2000);
+    };
+
+    /**
+     * After a successful queue/pregenerate: close modal, confirm, poll.
+     *
+     * @param {jQuery} $modal
+     * @param {number|string} cmid
+     * @param {string} [state]
+     */
+    var afterQueueSuccess = function($modal, cmid, state) {
+        updateIconState(cmid, state || 'processing');
+        closeModal($modal);
+        Str.get_string('modal:statusqueued', 'local_learningprism').then(function(msg) {
+            showFeedback(msg, 'info');
+        }).catch(function() {
+            showFeedback('Formats are being generated.', 'info');
+        });
+        startStatusPoll(cmid);
     };
 
     var isCourseIndexNode = function(el) {
@@ -194,6 +304,8 @@ define([
                 formats: formats,
                 backgrounds: data.backgrounds || [],
                 fonts: data.fonts || [],
+                voices: data.voices || [],
+                showvoice: !!data.showvoice,
                 canmanage: canManage,
                 cmid: instance.cmid,
                 requestlabel: requestLabel,
@@ -205,52 +317,69 @@ define([
                 if ($existing.length) {
                     $existing.remove();
                 }
-                var $modal = $('<div id="local-learningprism-modal" class="modal fade" tabindex="-1" role="dialog">' +
+                var $modal = $('<div id="local-learningprism-modal" class="modal fade" tabindex="-1" ' +
+                    'role="dialog" aria-modal="true">' +
                     '<div class="modal-dialog modal-lg" role="document"><div class="modal-content">' +
                     '<div class="modal-header"><h5 class="modal-title"></h5>' +
-                    '<button type="button" class="close" data-dismiss="modal" aria-label="Close">' +
-                    '<span aria-hidden="true">&times;</span></button></div>' +
+                    '<button type="button" class="btn-close close" data-bs-dismiss="modal" data-dismiss="modal" ' +
+                    'aria-label="Close"><span aria-hidden="true">&times;</span></button></div>' +
                     '<div class="modal-body"></div></div></div></div>');
                 Str.get_string('modal:title', 'local_learningprism').then(function(title) {
                     $modal.find('.modal-title').text(title);
                     $modal.find('.modal-body').html(html);
                     $('body').append($modal);
-                    if (typeof $modal.modal === 'function') {
-                        $modal.modal('show');
-                    } else {
-                        $modal.addClass('show').css('display', 'block');
-                    }
+
+                    var showModal = function() {
+                        if (typeof window.bootstrap !== 'undefined' && window.bootstrap.Modal) {
+                            window.bootstrap.Modal.getOrCreateInstance($modal[0]).show();
+                        } else if (typeof $modal.modal === 'function') {
+                            $modal.modal('show');
+                        } else {
+                            $modal.addClass('show').css('display', 'block');
+                            if (!$('.modal-backdrop').length) {
+                                $('body').append('<div class="modal-backdrop fade show"></div>');
+                            }
+                            $('body').addClass('modal-open');
+                        }
+                    };
+                    showModal();
+
+                    var setBusy = function(busy) {
+                        $modal.find('[data-action^="lp-"]').prop('disabled', !!busy);
+                    };
+
+                    $modal.on('click', '[data-bs-dismiss="modal"], [data-dismiss="modal"]', function(e) {
+                        e.preventDefault();
+                        closeModal($modal);
+                    });
 
                     $modal.on('click', '[data-action="lp-request"]', function(e) {
                         e.preventDefault();
                         var formatsSel = selectedFormats($modal[0]);
                         if (!formatsSel.length) {
-                            Notification.addNotification({message: noneSelectedMsg, type: 'error'});
+                            showFeedback(noneSelectedMsg, 'warning');
                             return;
                         }
+                        setBusy(true);
                         Ajax.call([{
                             methodname: 'local_learningprism_request_formats',
                             args: {cmid: instance.cmid, formats: formatsSel, personal: false}
                         }])[0].then(function(result) {
-                            updateIconState(instance.cmid, result.state);
-                            if (typeof $modal.modal === 'function') {
-                                $modal.modal('hide');
-                            } else {
-                                $modal.remove();
-                            }
-                            return Str.get_string('modal:statusqueued', 'local_learningprism');
-                        }).then(function(msg) {
-                            Notification.addNotification({message: msg, type: 'info'});
-                        }).catch(Notification.exception);
+                            afterQueueSuccess($modal, instance.cmid, result.state || 'processing');
+                        }).catch(function(ex) {
+                            setBusy(false);
+                            Notification.exception(ex);
+                        });
                     });
 
                     $modal.on('click', '[data-action="lp-request-personal"]', function(e) {
                         e.preventDefault();
                         var formatsSel = selectedFormats($modal[0]);
                         if (!formatsSel.length) {
-                            Notification.addNotification({message: noneSelectedMsg, type: 'error'});
+                            showFeedback(noneSelectedMsg, 'warning');
                             return;
                         }
+                        setBusy(true);
                         Ajax.call([{
                             methodname: 'local_learningprism_request_formats',
                             args: {
@@ -258,19 +387,15 @@ define([
                                 formats: formatsSel,
                                 personal: true,
                                 printbackground: $modal.find('[name="lpbackground"]').val() || '',
-                                font: $modal.find('[name="lpfont"]').val() || ''
+                                font: $modal.find('[name="lpfont"]').val() || '',
+                                voice: $modal.find('[name="lpvoice"]').val() || ''
                             }
                         }])[0].then(function(result) {
-                            updateIconState(instance.cmid, result.state);
-                            if (typeof $modal.modal === 'function') {
-                                $modal.modal('hide');
-                            } else {
-                                $modal.remove();
-                            }
-                            return Str.get_string('modal:statusqueued', 'local_learningprism');
-                        }).then(function(msg) {
-                            Notification.addNotification({message: msg, type: 'info'});
-                        }).catch(Notification.exception);
+                            afterQueueSuccess($modal, instance.cmid, result.state || 'processing');
+                        }).catch(function(ex) {
+                            setBusy(false);
+                            Notification.exception(ex);
+                        });
                     });
 
                     $modal.on('click', '[data-action="lp-download"]', function(e) {
@@ -301,28 +426,29 @@ define([
 
                     $modal.on('click', '[data-action="lp-pregenerate"]', function(e) {
                         e.preventDefault();
+                        var formatsSel = selectedFormats($modal[0]);
+                        if (!formatsSel.length) {
+                            showFeedback(noneSelectedMsg, 'warning');
+                            return;
+                        }
+                        setBusy(true);
                         Ajax.call([{
                             methodname: 'local_learningprism_pregenerate_formats',
                             args: {
                                 courseid: pageCourseId,
                                 cmids: [instance.cmid],
-                                formats: selectedFormats($modal[0])
+                                formats: formatsSel
                             }
                         }])[0].then(function() {
-                            updateIconState(instance.cmid, 'processing');
-                            if (typeof $modal.modal === 'function') {
-                                $modal.modal('hide');
-                            } else {
-                                $modal.remove();
-                            }
-                            return Str.get_string('modal:statusqueued', 'local_learningprism');
-                        }).then(function(msg) {
-                            Notification.addNotification({message: msg, type: 'info'});
-                        }).catch(Notification.exception);
+                            afterQueueSuccess($modal, instance.cmid, 'processing');
+                        }).catch(function(ex) {
+                            setBusy(false);
+                            Notification.exception(ex);
+                        });
                     });
 
                     $modal.on('hidden.bs.modal', function() {
-                        $modal.remove();
+                        closeModal($modal);
                     });
                 }).catch(Notification.exception);
             });

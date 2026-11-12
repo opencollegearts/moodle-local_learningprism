@@ -54,6 +54,19 @@ class access_token {
     }
 
     /**
+     * GCP project id from the TTS service-account JSON (for x-goog-user-project).
+     *
+     * @return string
+     */
+    public static function tts_project_id(): string {
+        $creds = json_decode(self::tts_json(), true);
+        if (!is_array($creds)) {
+            return '';
+        }
+        return trim((string) ($creds['project_id'] ?? ''));
+    }
+
+    /**
      * Service-account JSON for NotebookLM (optional dedicated JSON, else TTS JSON).
      *
      * @return string

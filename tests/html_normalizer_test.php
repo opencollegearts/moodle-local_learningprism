@@ -89,4 +89,42 @@ class html_normalizer_test extends \advanced_testcase {
         $this->assertStringContainsString('Title', $text);
         $this->assertStringContainsString('One sentence', $text);
     }
+
+    /**
+     * Audio script labels title once, skips page intro, and drops a repeated title heading.
+     */
+    public function test_to_speech_text_labelled_page(): void {
+        $this->resetAfterTest();
+        $html = '<!DOCTYPE html><html><body>'
+            . '<h1>This is a Page Resource type.</h1>'
+            . '<main>'
+            . '<div id="intro">This text is in the Description field of the Page Resource Type.</div>'
+            . '<div id="content"><p>This Text is in the Page content field of the Page Resource type.</p></div>'
+            . '</main></body></html>';
+        $text = html_normalizer::to_speech_text($html, 'This is a Page Resource type.');
+        $this->assertStringContainsString('Title: This is a Page Resource type.', $text);
+        $this->assertStringContainsString('Content:', $text);
+        $this->assertStringContainsString('Page content field', $text);
+        $this->assertStringNotContainsString('Description field', $text);
+        // Title should appear once as the labelled prefix, not again from <h1>.
+        $this->assertSame(1, substr_count(\core_text::strtolower($text), \core_text::strtolower('This is a Page Resource type.')));
+    }
+
+    /**
+     * Label audio: course-index title once, then body (even when body starts with a different heading).
+     */
+    public function test_to_speech_text_labelled_label(): void {
+        $this->resetAfterTest();
+        $html = '<!DOCTYPE html><html><body>'
+            . '<h1>Setting Up Your Google Documents</h1>'
+            . '<main><div id="label-content">'
+            . '<h4>Setting Up Your Module 2 Documents</h4>'
+            . '<p>Open Google Docs and create a new document.</p>'
+            . '</div></main></body></html>';
+        $text = html_normalizer::to_speech_text($html, 'Setting Up Your Google Documents');
+        $this->assertStringStartsWith('Title: Setting Up Your Google Documents.', $text);
+        $this->assertStringContainsString('Content: Setting Up Your Module 2 Documents', $text);
+        $this->assertStringContainsString('Open Google Docs', $text);
+        $this->assertSame(1, substr_count(\core_text::strtolower($text), 'setting up your google documents'));
+    }
 }
